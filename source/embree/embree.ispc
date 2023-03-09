@@ -176,26 +176,10 @@ float3 sample_direct_light(const SceneContext *uniform scene,
             }
         }
     }
-    
+
     return illum;
 }
 
-// A miss "shader" to make the same checkerboard background for testing as in the DXR backend
-float3 miss_shader(const float3 &dir)
-{
-    // float u = (1.f + atan2(dir.x, -dir.z) * M_1_PI) * 0.5f;
-    // float v = acos(dir.y) * M_1_PI;
-
-    // int check_x = u * 10.f;
-    // int check_y = v * 10.f;
-
-    // if (dir.y > -0.1 && mod(check_x + check_y, 2) == 0) {
-    //     return make_float3(0.5f);
-    // }
-    // return make_float3(0.1f);
-
-    return make_float3(0.0f);
-}
 
 export void trace_rays(void *uniform _scene,
                        void *uniform _tile)
@@ -213,103 +197,144 @@ export void trace_rays(void *uniform _scene,
         tile->shadow[px_id + 1] =  0.0;
         tile->shadow[px_id + 2] =  0.0;
 
-        tile->albedo[px_id] =  0.0;
-        tile->albedo[px_id + 1] =  0.0;
-        tile->albedo[px_id + 2] =  0.0;
+        tile->albedo[px_id] = 0.0;
+        tile->albedo[px_id + 1] = 0.0;
+        tile->albedo[px_id + 2] = 0.0;
 
         const uint32_t i = mod(ray, tile->width);
         const uint32_t j = ray / tile->width;
 
-        LCGRand rng = get_rng((tile->x + i + (tile->y + j) * tile->fb_width), tile->frame_id + 1);
+        float3 illum = make_float3(0.0);
+        LCGRand rng = get_rng((tile->x + i + (tile->y + j) * tile->fb_width),
+                                tile->frame_id + 1);
 
         const float px_x = (i + tile->x + lcg_randomf(rng)) / tile->fb_width;
         const float px_y = (j + tile->y + lcg_randomf(rng)) / tile->fb_height;
-        
+
         const uint32_t fb_px = ((j + tile->y) * tile->fb_width + i + tile->x) * 4;
-
-        float x = tile->position[fb_px];
-        float y = tile->position[fb_px + 1];
-        float z = tile->position[fb_px + 2];
-
-        if (x == 0.0 && y == 0.0 && z == 0.0) {
-            continue;
-        }
-
-        float3 pos = make_float3(x, y, z);
-
-        DisneyMaterial mat;
 
         RTCRayHit path_ray;
         {
-            float3 org = make_float3(tile->camera_x, tile->camera_y, tile->camera_z);
-            float3 dir = normalize(pos - org);
+            float3 org = make_float3(tile->position[fb_px], tile->position[fb_px + 1], tile->position[fb_px + 2]);
 
-            set_ray_hit(path_ray, org, dir, 0.f);
+            if (all_zero(org)) {
+                continue;
+            }
+            float3 cam_pos = make_float3(tile->camera_x, tile->camera_y, tile->camera_z);
+            float3 dir = normalize(org - cam_pos);
+
+            set_ray_hit(path_ray, cam_pos, dir, 0.f);
         }
 
-        rtcIntersectV(scene->scene, &context, &path_ray);
+        int bounce = 0;
+        float3 path_throughput = make_float3(1.0);
+        DisneyMaterial mat;
+        mat4 matrix;
+        do {
+            rtcIntersectV(scene->scene, &context, &path_ray);
 
-        const int inst = path_ray.hit.instID[0];
-        const int geom = path_ray.hit.geomID;
-        const int prim = path_ray.hit.primID;
+            context.flags = RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
 
-        const float3 w_o =
-            make_float3(-path_ray.ray.dir_x, -path_ray.ray.dir_y, -path_ray.ray.dir_z);
+            const int inst = path_ray.hit.instID[0];
+            const int geom = path_ray.hit.geomID;
+            const int prim = path_ray.hit.primID;
 
-        if (geom == RTC_INVALID_GEOMETRY_ID || inst == RTC_INVALID_GEOMETRY_ID ||
-            prim == RTC_INVALID_GEOMETRY_ID) {
-            continue;
-        }
+            const float3 w_o =
+                make_float3(-path_ray.ray.dir_x, -path_ray.ray.dir_y, -path_ray.ray.dir_z);
 
-        const float p_x = path_ray.ray.org_x + path_ray.ray.tfar * path_ray.ray.dir_x;
-        const float p_y = path_ray.ray.org_y + path_ray.ray.tfar * path_ray.ray.dir_y;
-        const float p_z = path_ray.ray.org_z + path_ray.ray.tfar * path_ray.ray.dir_z;
+            if (geom == RTC_INVALID_GEOMETRY_ID || inst == RTC_INVALID_GEOMETRY_ID ||
+                prim == RTC_INVALID_GEOMETRY_ID) {
+                if (bounce == 0) {
+                    tile->albedo[px_id + 0] = 0.0;
+                    tile->albedo[px_id + 1] = 0.0;
+                    tile->albedo[px_id + 2] = 0.0;
+                }
+                break;
+            }
 
-        const float3 hit_p = make_float3(p_x, p_y, p_z);
+            const float3 hit_p =
+                make_float3(path_ray.ray.org_x + path_ray.ray.tfar * path_ray.ray.dir_x,
+                            path_ray.ray.org_y + path_ray.ray.tfar * path_ray.ray.dir_y,
+                            path_ray.ray.org_z + path_ray.ray.tfar * path_ray.ray.dir_z);
 
-        float3 normal = normalize(make_float3(path_ray.hit.Ng_x, path_ray.hit.Ng_y, path_ray.hit.Ng_z));
+            float3 normal = normalize(
+                make_float3(path_ray.hit.Ng_x, path_ray.hit.Ng_y, path_ray.hit.Ng_z));
 
-        const float2 bary = make_float2(path_ray.hit.u, path_ray.hit.v);
+            const float2 bary = make_float2(path_ray.hit.u, path_ray.hit.v);
 
-        const ISPCInstance *instance = &scene->instances[inst];
-        const ISPCGeometry *geometry = &instance->geometries[geom];
+            const ISPCInstance *instance = &scene->instances[inst];
+            const ISPCGeometry *geometry = &instance->geometries[geom];
 
-        float2 uv = make_float2(0.f, 0.f);
-        const uint3 indices = geometry->index_buf[prim];
+            float2 uv = make_float2(0.f, 0.f);
+            const uint3 indices = geometry->index_buf[prim];
 
-        if (geometry->uv_buf) {
-            float2 uva = geometry->uv_buf[indices.x];
-            float2 uvb = geometry->uv_buf[indices.y];
-            float2 uvc = geometry->uv_buf[indices.z];
-            uv = (1.f - bary.x - bary.y) * uva + bary.x * uvb + bary.y * uvc;
-        }
+            if (geometry->uv_buf) {
+                float2 uva = geometry->uv_buf[indices.x];
+                float2 uvb = geometry->uv_buf[indices.y];
+                float2 uvc = geometry->uv_buf[indices.z];
+                uv = (1.f - bary.x - bary.y) * uva + bary.x * uvb + bary.y * uvc;
+            }
 
-        unpack_material(
-            mat, &scene->materials[instance->material_ids[geom]], scene->textures, uv);
+            // Transform the normal back to world space
+            load_mat4(matrix, instance->world_to_object);
+            transpose(matrix);
+            normal = normalize(mul(matrix, normal));
 
-        tile->albedo[px_id] = mat.base_color.x;
-        tile->albedo[px_id + 1] =  mat.base_color.y;
-        tile->albedo[px_id + 2] =  mat.base_color.z;
+            unpack_material(
+                mat, &scene->materials[instance->material_ids[geom]], scene->textures, uv);
+            
+            if (bounce == 0) {
+                tile->albedo[px_id + 0] = mat.base_color.x;
+                tile->albedo[px_id + 1] = mat.base_color.y;
+                tile->albedo[px_id + 2] = mat.base_color.z;
+            }
 
-        float3 v_x, v_y;
-        if (mat.specular_transmission == 0.f && dot(w_o, normal) < 0.0) {
-            normal = neg(normal);
-        }
-        ortho_basis(v_x, v_y, normal);
-        float3 test = sample_direct_light(scene,
-                                          mat,
-                                          hit_p,
-                                          normal,
-                                          v_x,
-                                          v_y,
-                                          w_o,
-                                          &context,
-                                          scene->lights,
-                                          scene->num_lights,
-                                          rng);
-        tile->shadow[px_id] = test.x;
-        tile->shadow[px_id + 1] = test.y;
-        tile->shadow[px_id + 2] = test.z;
+            // Direct light sampling
+            float3 v_x, v_y;
+            if (mat.specular_transmission == 0.f && dot(w_o, normal) < 0.0) {
+                normal = neg(normal);
+            }
+            ortho_basis(v_x, v_y, normal);
+            illum = illum + path_throughput * sample_direct_light(scene,
+                                                                    mat,
+                                                                    hit_p,
+                                                                    normal,
+                                                                    v_x,
+                                                                    v_y,
+                                                                    w_o,
+                                                                    &context,
+                                                                    scene->lights,
+                                                                    scene->num_lights,
+                                                                    rng);
+
+            // Sample the BSDF to continue the ray
+            float pdf;
+            float3 w_i;
+            float3 bsdf = sample_disney_brdf(mat, normal, w_o, v_x, v_y, rng, w_i, pdf);
+            if (pdf == 0.f || all_zero(bsdf)) {
+                break;
+            }
+            path_throughput = path_throughput * bsdf * abs(dot(w_i, normal)) / pdf;
+
+            // Trace the ray continuing the path
+            set_ray_hit(path_ray, hit_p, w_i, EPSILON);
+            bounce++;
+
+            // Russian roulette termination
+            if (bounce > 3) {
+                const float q = max(0.05f,
+                                    1.f - max(path_throughput.x,
+                                                max(path_throughput.y, path_throughput.z)));
+                if (lcg_randomf(rng) < q) {
+                    break;
+                }
+                path_throughput = path_throughput / (1.f - q);
+            }
+        } while (bounce < 3);
+
+        tile->shadow[px_id + 0] = (tile->albedo[px_id + 0] < 0.01) ? 0.0 : (illum.x / tile->albedo[px_id + 0]);
+        tile->shadow[px_id + 1] = (tile->albedo[px_id + 1] < 0.01) ? 0.0 : (illum.y / tile->albedo[px_id + 1]);
+        tile->shadow[px_id + 2] = (tile->albedo[px_id + 2] < 0.01) ? 0.0 : (illum.z / tile->albedo[px_id + 2]);
     }
 }
 

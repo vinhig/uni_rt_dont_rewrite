@@ -21,6 +21,36 @@
 #include "scene.h"
 #include "util.h"
 
+const std::string fullscreen_quad_vs = R"(
+#version 330 core
+
+const vec4 pos[4] = vec4[4](
+	vec4(-1, 1, 0.5, 1),
+	vec4(-1, -1, 0.5, 1),
+	vec4(1, 1, 0.5, 1),
+	vec4(1, -1, 0.5, 1)
+);
+
+void main(void){
+	gl_Position = pos[gl_VertexID];
+}
+)";
+
+const std::string fullscreen_quad_fs = R"(
+#version 330 core
+
+uniform sampler2D img;
+
+out vec4 color;
+
+void main(void){ 
+	ivec2 uv = ivec2(gl_FragCoord.x, gl_FragCoord.y);
+	color = vec4(texelFetch(img, uv, 0).xyz, 1.0);
+
+  // Apply gamma correction
+  color = pow(color, vec4(1.0/2.2));
+})";
+
 static void GLAPIENTRY OglDebugOutput(GLenum source, GLenum type, GLuint id,
                                       GLenum severity, GLsizei length,
                                       const GLchar *message,
@@ -99,34 +129,66 @@ Render::Render() {
     printf("sheeeesh\n");
   };
   ImGui_ImplOpenGL3_Init("#version 330");
+  {
+    std::ifstream features_vertex_file("../shaders/features.vert.glsl");
+    std::ostringstream fv_ss;
+    fv_ss << features_vertex_file.rdbuf();
+    std::string features_vertex_source = fv_ss.str();
 
-  std::ifstream features_vertex_file("../shaders/features.vert.glsl");
-  std::ostringstream fv_ss;
-  fv_ss << features_vertex_file.rdbuf();
-  std::string features_vertex_source = fv_ss.str();
+    std::ifstream features_fragment_file("../shaders/features.frag.glsl");
+    std::ostringstream ff_ss;
+    ff_ss << features_fragment_file.rdbuf();
+    std::string features_fragment_source = ff_ss.str();
 
-  std::ifstream features_fragment_file("../shaders/features.frag.glsl");
-  std::ostringstream ff_ss;
-  ff_ss << features_fragment_file.rdbuf();
-  std::string features_fragment_source = ff_ss.str();
+    GLuint features_fragment =
+        CompileShader("../shader/features.frag.glsl",
+                      features_fragment_source.c_str(), GL_FRAGMENT_SHADER);
+    GLuint features_vertex =
+        CompileShader("../shader/features.vert.glsl",
+                      features_vertex_source.c_str(), GL_VERTEX_SHADER);
 
-  GLuint features_fragment =
-      CompileShader("../shader/features.frag.glsl",
-                    features_fragment_source.c_str(), GL_FRAGMENT_SHADER);
-  GLuint features_vertex =
-      CompileShader("../shader/features.vert.glsl",
-                    features_vertex_source.c_str(), GL_VERTEX_SHADER);
+    features_program = glCreateProgram();
+    glAttachShader(features_program, features_vertex);
+    glAttachShader(features_program, features_fragment);
+    glLinkProgram(features_program);
 
-  features_program = glCreateProgram();
-  glAttachShader(features_program, features_vertex);
-  glAttachShader(features_program, features_fragment);
-  glLinkProgram(features_program);
-
-  glDeleteShader(features_vertex);
-  glDeleteShader(features_fragment);
+    glDeleteShader(features_vertex);
+    glDeleteShader(features_fragment);
+  }
 
   transform_location = glGetUniformLocation(features_program, "transform");
   view_proj_location = glGetUniformLocation(features_program, "view_proj");
+
+  {
+    std::ifstream features_ta_file("../shaders/ta.comp.glsl");
+    std::ostringstream ta_ss;
+    ta_ss << features_ta_file.rdbuf();
+    std::string features_ta_source = ta_ss.str();
+
+    GLuint ta_compute =
+        CompileShader("../shader/ta.comp.glsl", features_ta_source.c_str(),
+                      GL_COMPUTE_SHADER);
+
+    ta_program = glCreateProgram();
+    glAttachShader(ta_program, ta_compute);
+    glLinkProgram(ta_program);
+
+    glDeleteShader(ta_compute);
+  }
+
+  {
+    quad_program = glCreateProgram();
+    GLuint quad_vertex =
+        CompileShader("fullscreen quad vertex shader", &fullscreen_quad_vs[0],
+                      GL_VERTEX_SHADER);
+    GLuint quad_fragment =
+        CompileShader("fullscreen quad fragment shader", &fullscreen_quad_fs[0],
+                      GL_FRAGMENT_SHADER);
+
+    glAttachShader(quad_program, quad_vertex);
+    glAttachShader(quad_program, quad_fragment);
+    glLinkProgram(quad_program);
+  }
 
   glEnable(GL_DEPTH_TEST);
 
@@ -134,72 +196,105 @@ Render::Render() {
   camera.angle = 0.0;
   camera.distance = 20.0;
 
-  glGenFramebuffers(1, &features_fbo);
-  glGenTextures(1, &position_texture);
-  glGenTextures(1, &normal_texture);
-  glGenTextures(1, &depth_texture);
+  glGenFramebuffers(2, features_fbo);
+  glGenTextures(2, position_texture);
+  glGenTextures(2, normal_texture);
+  glGenTextures(2, depth_texture);
+  glGenTextures(2, accumulated_texture);
+  glGenTextures(2, moment_texture);
+  glGenTextures(2, history_length);
   // glGenTextures(1, &visibility_texture);
 
-  glBindTexture(GL_TEXTURE_2D, position_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  for (int i = 0; i < 2; i++) {
+    glBindTexture(GL_TEXTURE_2D, position_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  glBindTexture(GL_TEXTURE_2D, normal_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, normal_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  // glBindTexture(GL_TEXTURE_2D, visibility_texture);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, 1280, 720, 0, GL_RGBA_INTEGER,
-  //              GL_UNSIGNED_INT, nullptr);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glBindTexture(GL_TEXTURE_2D, visibility_texture);
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, 1280, 720, 0,
+    // GL_RGBA_INTEGER,
+    //              GL_UNSIGNED_INT, nullptr);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  glBindTexture(GL_TEXTURE_2D, depth_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 1280, 720, 0,
-               GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, depth_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 1280, 720, 0,
+                 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, features_fbo);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         position_texture, 0);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
-                         normal_texture, 0);
-  // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
-  //                        visibility_texture, 0);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                         depth_texture, 0);
+    glBindTexture(GL_TEXTURE_2D, accumulated_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  GLenum draw_buffers[] = {
-      GL_COLOR_ATTACHMENT0,
-      GL_COLOR_ATTACHMENT1,
-  };
-  // GL_COLOR_ATTACHMENT2};
-  glDrawBuffers(2, draw_buffers);
+    glBindTexture(GL_TEXTURE_2D, moment_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-    printf("oh noooo\n");
+    glBindTexture(GL_TEXTURE_2D, history_length[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 1280, 720, 0, GL_RED_INTEGER,
+                 GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, features_fbo[i]);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           position_texture[i], 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
+                           normal_texture[i], 0);
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2,
+    // GL_TEXTURE_2D,
+    //                        visibility_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                           depth_texture[i], 0);
+
+    GLenum draw_buffers[] = {
+        GL_COLOR_ATTACHMENT0,
+        GL_COLOR_ATTACHMENT1,
+    };
+    // GL_COLOR_ATTACHMENT2};
+    glDrawBuffers(2, draw_buffers);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+      printf("oh noooo\n");
+    }
+
+    glGenTextures(1, &shadow_texture[i]);
+    glBindTexture(GL_TEXTURE_2D, shadow_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glGenTextures(1, &albedo_texture[i]);
+    glBindTexture(GL_TEXTURE_2D, albedo_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   }
+
+  glGenBuffers(1, &reprojection_buffer);
+  glBindBuffer(GL_UNIFORM_BUFFER, reprojection_buffer);
+  auto dummy = ReprojectionCB{};
+  glBufferData(GL_UNIFORM_BUFFER, sizeof(ReprojectionCB), &dummy,
+               GL_DYNAMIC_DRAW);
 
   SetupEmbree();
 
-  glGenTextures(1, &shadow_texture);
-  glBindTexture(GL_TEXTURE_2D, shadow_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-  glGenTextures(1, &albedo_texture);
-  glBindTexture(GL_TEXTURE_2D, albedo_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  camera.Update(16 / 1000.0);
 }
 
 void Render::SetupEmbree() {
@@ -391,7 +486,7 @@ void Render::SetSceneOpenGL(Scene *scene) {
 }
 
 void Render::DrawFeatureBuffers() {
-  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, features_fbo);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, features_fbo[current_frame % 2]);
   glClearColor(0.0, 0.0, 0.0, 0.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -413,11 +508,11 @@ void Render::DrawFeatureBuffers() {
     }
   }
 
-  glBindTexture(GL_TEXTURE_2D, position_texture);
+  glBindTexture(GL_TEXTURE_2D, position_texture[current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 position_texture_pixels.data());
 
-  glBindTexture(GL_TEXTURE_2D, normal_texture);
+  glBindTexture(GL_TEXTURE_2D, normal_texture[current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 normal_texture_pixels.data());
   // normal_texture_pixels.data());
@@ -438,10 +533,6 @@ bool Render::UpdateSDL() {
 
 void Render::DrawGUI() {
 
-  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-  glClearColor(1.0, 0.9, 0.8, 1.0);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplSDL2_NewFrame(window);
   ImGui::NewFrame();
@@ -451,6 +542,8 @@ void Render::DrawGUI() {
   ImGui::Begin("My awesome memory thesis", NULL, ImGuiCond_Always);
   ImGui::Text("Platform: %s", SDL_GetPlatform());
   ImGui::Text("Current scene: %s", current_scene_name.c_str());
+
+  ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
 
   // a list of options in imgui containing "bmfr", "none", "optix"
   static char *denoisers[] = {
@@ -473,31 +566,31 @@ void Render::DrawGUI() {
   }
   {
     ImVec2 wsize;
-    wsize.x = 1280 / 5 * 1.2;
-    wsize.y = 720 / 5 * 1.2;
-    ImGui::Image((ImTextureID)albedo_texture, wsize, ImVec2(0, 1),
-                 ImVec2(1, 0));
+    wsize.x = 1280 / 5 * 1.9;
+    wsize.y = 720 / 5 * 1.9;
+    ImGui::Image((ImTextureID)albedo_texture[current_frame % 2], wsize,
+                 ImVec2(0, 1), ImVec2(1, 0));
   }
   {
     ImVec2 wsize;
     wsize.x = 1280 / 5 * 1.9;
     wsize.y = 720 / 5 * 1.9;
-    ImGui::Image((ImTextureID)shadow_texture, wsize, ImVec2(0, 1),
-                 ImVec2(1, 0));
+    ImGui::Image((ImTextureID)shadow_texture[current_frame % 2], wsize,
+                 ImVec2(0, 1), ImVec2(1, 0));
   }
   {
     ImVec2 wsize;
-    wsize.x = 1280 / 5 * 1.2;
-    wsize.y = 720 / 5 * 1.2;
-    ImGui::Image((ImTextureID)position_texture, wsize, ImVec2(0, 1),
-                 ImVec2(1, 0));
+    wsize.x = 1280 / 5 * 1.9;
+    wsize.y = 720 / 5 * 1.9;
+    ImGui::Image((ImTextureID)position_texture[current_frame % 2], wsize,
+                 ImVec2(0, 1), ImVec2(1, 0));
   }
   {
     ImVec2 wsize;
-    wsize.x = 1280 / 5 * 1.2;
-    wsize.y = 720 / 5 * 1.2;
-    ImGui::Image((ImTextureID)normal_texture, wsize, ImVec2(0, 1),
-                 ImVec2(1, 0));
+    wsize.x = 1280 / 5 * 1.9;
+    wsize.y = 720 / 5 * 1.9;
+    ImGui::Image((ImTextureID)normal_texture[current_frame % 2], wsize,
+                 ImVec2(0, 1), ImVec2(1, 0));
   }
   // {
   //   ImVec2 wsize;
@@ -512,15 +605,7 @@ void Render::DrawGUI() {
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-void Render::DrawDenoise() {
-  glBindTexture(GL_TEXTURE_2D, shadow_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               img_shadow.data());
-
-  glBindTexture(GL_TEXTURE_2D, albedo_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               img_albedo.data());
-}
+void Render::DrawDenoise() {}
 
 void Render::DrawEmbree() {
   embree::SceneContext ispc_scene;
@@ -579,11 +664,27 @@ bool Render::Update() {
 
   DrawEmbree();
 
+  if (temporal_accumulation) {
+    TemporalAccumulation();
+  }
+
   DrawDenoise();
+
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+  glClearColor(1.0, 0.9, 0.8, 1.0);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glUseProgram(quad_program);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, accumulated_texture[current_frame % 2]);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
   DrawGUI();
 
   SDL_GL_SwapWindow(window);
+
+  current_frame += 1;
 
   return quit;
 }
@@ -602,5 +703,103 @@ void Render::SetScene(UniRt::Scene *scene, std::string scene_name) {
   SetSceneOpenGL(scene);
 
   current_scene_name = scene_name;
+}
+
+void Render::TemporalAccumulation() {
+  glBindTexture(GL_TEXTURE_2D, shadow_texture[current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+               img_shadow.data());
+
+  glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+               img_albedo.data());
+
+  glUseProgram(ta_program);
+
+  // t_curr_normal
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, normal_texture[current_frame % 2]);
+  // t_prev_normal
+  glActiveTexture(GL_TEXTURE3);
+  glBindTexture(GL_TEXTURE_2D, normal_texture[1 - current_frame % 2]);
+
+  // t_prev_moments
+  glActiveTexture(GL_TEXTURE4);
+  glBindTexture(GL_TEXTURE_2D, moment_texture[1 - current_frame % 2]);
+
+  // t_curr_indirect
+  glActiveTexture(GL_TEXTURE5);
+  glBindTexture(GL_TEXTURE_2D, shadow_texture[current_frame % 2]);
+
+  // t_prev_accumulated
+  glActiveTexture(GL_TEXTURE6);
+  glBindTexture(GL_TEXTURE_2D, shadow_texture[1 - current_frame % 2]);
+
+  // t_out_accumulated
+  glBindImageTexture(7, accumulated_texture[current_frame % 2], 0, 0, 0,
+                     GL_READ_WRITE, GL_RGBA32F);
+
+  // t_out_moments
+  glBindImageTexture(8, moment_texture[current_frame % 2], 0, 0, 0,
+                     GL_READ_WRITE, GL_RG16F);
+
+  // t_out_history_length
+  glBindImageTexture(9, history_length[current_frame % 2], 0, 0, 0,
+                     GL_READ_WRITE, GL_R8UI);
+
+  // t_curr_depth
+  glActiveTexture(GL_TEXTURE11);
+  glBindTexture(GL_TEXTURE_2D, depth_texture[current_frame % 2]);
+
+  // t_prev_depth
+  glActiveTexture(GL_TEXTURE12);
+  glBindTexture(GL_TEXTURE_2D, depth_texture[1 - current_frame % 2]);
+
+  ReprojectionCB cb = {};
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      cb.prev_view_proj[i][j] = camera.prev_view_proj[i][j];
+    }
+  }
+
+  auto inv_view_proj = glm::inverse(camera.view_proj);
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      cb.inv_view_proj[i][j] = inv_view_proj[i][j];
+    }
+  }
+
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      cb.view_proj[i][j] = camera.view_proj[i][j];
+    }
+  }
+
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      cb.proj[i][j] = camera.proj[i][j];
+    }
+  }
+
+  for (unsigned i = 0; i < 3; i++) {
+    cb.view_pos[i] = camera.offset[i];
+  }
+  cb.view_pos[3] = 1.0f;
+  cb.target_dim[0] = 1280;
+  cb.target_dim[1] = 720;
+  cb.alpha_illum = 0.05f;
+  cb.alpha_moments = 0.05f;
+  cb.phi_depth = 0.2f;
+  cb.phi_normal = 0.3f;
+  cb.frame_number = current_frame;
+
+  glBindBuffer(GL_UNIFORM_BUFFER, reprojection_buffer);
+  glBufferData(GL_UNIFORM_BUFFER, sizeof(ReprojectionCB), &cb, GL_DYNAMIC_DRAW);
+
+  glBindBufferBase(GL_UNIFORM_BUFFER, 0, reprojection_buffer);
+
+  glDispatchCompute(1280 / 8, 720 / 8, 1);
+
+  glMemoryBarrier(GL_ALL_BARRIER_BITS);
 }
 } // namespace UniRt

@@ -36,7 +36,9 @@ public:
 
     glm::vec3 offset;
 
+    glm::mat4 proj;
     glm::mat4 view_proj;
+    glm::mat4 prev_view_proj;
 
     void Update(double delta) {
       offset.x = cos(angle) * distance;
@@ -45,9 +47,10 @@ public:
 
       angle += delta * speed;
 
+      prev_view_proj = view_proj;
+      proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.0f, 0.1f, 50.0f);
       view_proj =
-          glm::perspective(glm::radians(45.0f), 16.0f / 9.0f, 0.1f, 150.0f) *
-          glm::lookAt(offset, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+          proj * glm::lookAt(offset, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
     }
   };
 
@@ -71,13 +74,16 @@ private:
 
   unsigned current_frame{0};
 
-  GLuint features_fbo;
-  GLuint position_texture;
-  GLuint normal_texture;
+  GLuint features_fbo[2];
+  GLuint position_texture[2];
+  GLuint normal_texture[2];
   // GLuint visibility_texture;
-  GLuint depth_texture;
+  GLuint depth_texture[2];
 
+  GLuint quad_program;
   GLuint features_program;
+  GLuint ta_program;
+
   // GLuint features_vao;
   GLuint transform_location;
   GLuint view_proj_location;
@@ -85,8 +91,29 @@ private:
   GLuint geometry_id_location;
   GLuint prim_id_location;
 
-  GLuint shadow_texture;
-  GLuint albedo_texture;
+  GLuint shadow_texture[2];
+  GLuint albedo_texture[2];
+
+  struct ReprojectionCB {
+    float view_proj[4][4];
+    float inv_view_proj[4][4];
+    float prev_view_proj[4][4];
+    float proj[4][4];
+    float view_pos[4];
+    float target_dim[2];
+    float alpha_illum;
+    float alpha_moments;
+    float phi_depth;
+    float phi_normal;
+    int frame_number;
+  };
+
+  bool temporal_accumulation{true};
+
+  GLuint accumulated_texture[2];
+  GLuint moment_texture[2];
+  GLuint history_length[2];
+  GLuint reprojection_buffer;
 
   struct Geometry {
     GLuint vertex_buffer;
@@ -130,5 +157,7 @@ private:
   void SetSceneOpenGL(UniRt::Scene *scene);
 
   void SetSceneEmbree(UniRt::Scene *scene);
+
+  void TemporalAccumulation();
 };
 } // namespace UniRt
