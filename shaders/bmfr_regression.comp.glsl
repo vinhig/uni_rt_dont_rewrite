@@ -582,7 +582,6 @@ void main() {
       continue;
     }
     vec4 storeTemp_20 =
-        texelFetch(albedo, uv_1, 0) *
         vec4((uVec[index_6] < 0.0) ? 0.0 : uVec[index_6],
              (gchannel[index_6] < 0.0) ? 0.0 : gchannel[index_6],
              (bchannel[index_6] < 0.0) ? 0.0 : bchannel[index_6],
