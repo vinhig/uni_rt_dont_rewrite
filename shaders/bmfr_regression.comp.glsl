@@ -172,7 +172,7 @@ void main() {
     imageStore(tmp_data, ivec2(uvec2(index, 9 + BLOCK_OFFSET)),
                vec4(position.z * position.z));
 
-    vec4 albedo_value = texelFetch(albedo, uv, 0);
+    // vec4 albedo_value = texelFetch(albedo, uv, 0);
     vec4 noisy = texelFetch(noisy_data, uv, 0);
 
     float storeTemp_10 = noisy.x;

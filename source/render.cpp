@@ -42,13 +42,14 @@ void main(void){
 const std::string fullscreen_quad_fs = R"(
 #version 330 core
 
-uniform sampler2D img;
+uniform sampler2D denoised;
 
 out vec4 color;
 
 void main(void){ 
 	ivec2 uv = ivec2(gl_FragCoord.x, gl_FragCoord.y);
-	color = vec4(texelFetch(img, uv, 0).xyz, 1.0);
+
+	color = vec4(texelFetch(denoised, uv, 0).xyz, 1.0);
 
   // Apply gamma correction
   color = pow(color, vec4(1.0/2.2));
@@ -642,7 +643,7 @@ void Render::DrawGUI() {
 
 void Render::DrawDenoise() {
   denoised_texture = current_denoiser->Denoise(
-      current_frame, shadow_texture[current_frame % 2],
+      current_frame, accumulated_texture[current_frame % 2],
       position_texture[current_frame % 2], normal_texture[current_frame % 2],
       depth_texture[current_frame % 2], albedo_texture[current_frame % 2]);
 }
@@ -779,7 +780,7 @@ void Render::TemporalAccumulation() {
 
   // t_prev_accumulated
   glActiveTexture(GL_TEXTURE6);
-  glBindTexture(GL_TEXTURE_2D, shadow_texture[1 - current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, accumulated_texture[1 - current_frame % 2]);
 
   // t_out_accumulated
   glBindImageTexture(7, accumulated_texture[current_frame % 2], 0, 0, 0,
