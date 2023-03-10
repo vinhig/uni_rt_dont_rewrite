@@ -26,7 +26,9 @@ add_executable(uni_rt_dont_rewrite
     source/mesh.cpp
     source/scene.cpp
     source/util.cpp
-    source/embree_utils.cpp)
+    source/embree_utils.cpp
+    
+    source/denoisers/bmfr.cpp)
 
 
 target_include_directories(uni_rt_dont_rewrite PUBLIC imgui/)

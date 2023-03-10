@@ -33,12 +33,12 @@ layout(binding = 11) uniform sampler2D t_curr_depth;
 layout(binding = 12) uniform sampler2D t_prev_depth;
 
 layout(binding = 0, std140) uniform Reprojection {
-  uniform mat4 view_proj;
-  uniform mat4 inv_view_proj;
-  uniform mat4 prev_view_proj;
-  uniform mat4 proj;
-  uniform vec4 view_pos;
-  uniform vec2 target_dim;
+  mat4 view_proj;
+  mat4 inv_view_proj;
+  mat4 prev_view_proj;
+  mat4 proj;
+  vec4 view_pos;
+  vec2 target_dim;
   float alpha_illum;
   float alpha_moments;
   float phi_depth;
@@ -46,7 +46,7 @@ layout(binding = 0, std140) uniform Reprojection {
   float depth_tolerance;
   float normal_tolerance;
   float min_accum_weight;
-  int frame_number;
+  uint frame_number;
 }
 uniforms;
 

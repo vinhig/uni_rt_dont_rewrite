@@ -21,6 +21,9 @@
 #include "scene.h"
 #include "util.h"
 
+#include "denoisers/bmfr.h"
+#include "denoisers/none.h"
+
 const std::string fullscreen_quad_vs = R"(
 #version 330 core
 
@@ -293,6 +296,8 @@ Render::Render() {
                GL_DYNAMIC_DRAW);
 
   SetupEmbree();
+
+  current_denoiser = new Denoiser::BmfrDenoiser();
 
   camera.Update(16 / 1000.0);
 }
@@ -575,7 +580,20 @@ void Render::DrawGUI() {
       for (auto i = 0; i < 4; i++) {
         if (ImGui::Selectable(denoisers[i], i == chosen)) {
           chosen = i;
-          printf("HELLO\n");
+          switch (chosen) {
+          case 0: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::BmfrDenoiser();
+            break;
+          }
+          case 3: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::NoneDenoiser();
+          }
+          default: {
+            break;
+          }
+          }
         }
       }
     }
@@ -622,7 +640,12 @@ void Render::DrawGUI() {
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-void Render::DrawDenoise() {}
+void Render::DrawDenoise() {
+  denoised_texture = current_denoiser->Denoise(
+      current_frame, shadow_texture[current_frame % 2],
+      position_texture[current_frame % 2], normal_texture[current_frame % 2],
+      depth_texture[current_frame % 2], albedo_texture[current_frame % 2]);
+}
 
 void Render::DrawEmbree() {
   embree::SceneContext ispc_scene;
@@ -708,7 +731,7 @@ bool Render::Update() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(quad_program);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, accumulated_texture[current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, denoised_texture);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
   DrawGUI();
