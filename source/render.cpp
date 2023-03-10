@@ -543,7 +543,24 @@ void Render::DrawGUI() {
   ImGui::Text("Platform: %s", SDL_GetPlatform());
   ImGui::Text("Current scene: %s", current_scene_name.c_str());
 
+  ImGui::SliderFloat("Camera.far", &camera.far, 10.0f, 320.0f);
+  ImGui::SliderFloat("Camera.near", &camera.near, 0.01, 1.0f);
+
   ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
+
+  if (temporal_accumulation) {
+    ImGui::SliderFloat("Repro.phi_depth", &reprojection.phi_depth, 0.01f, 0.8f);
+    ImGui::SliderFloat("Repro.phi_normal", &reprojection.phi_normal, 0.01f,
+                       0.8f);
+
+    ImGui::SliderFloat("Repro.depth_tolerance", &reprojection.depth_tolerance,
+                       0.01f, 0.9f);
+    ImGui::SliderFloat("Repro.normal_tolerance", &reprojection.normal_tolerance,
+                       0.01f, 0.9f);
+
+    ImGui::SliderFloat("Repro.min_accum_weight", &reprojection.min_accum_weight,
+                       0.01f, 0.9f);
+  }
 
   // a list of options in imgui containing "bmfr", "none", "optix"
   static char *denoisers[] = {
@@ -664,8 +681,22 @@ bool Render::Update() {
 
   DrawEmbree();
 
+  glBindTexture(GL_TEXTURE_2D, shadow_texture[current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+               img_shadow.data());
+
+  glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+               img_albedo.data());
+
   if (temporal_accumulation) {
     TemporalAccumulation();
+  } else {
+    glCopyImageSubData(shadow_texture[current_frame % 2], GL_TEXTURE_2D, 0, 0,
+                       0, 0, accumulated_texture[current_frame % 2],
+                       GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
+
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
   }
 
   DrawDenoise();
@@ -706,14 +737,6 @@ void Render::SetScene(UniRt::Scene *scene, std::string scene_name) {
 }
 
 void Render::TemporalAccumulation() {
-  glBindTexture(GL_TEXTURE_2D, shadow_texture[current_frame % 2]);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               img_shadow.data());
-
-  glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-               img_albedo.data());
-
   glUseProgram(ta_program);
 
   // t_curr_normal
@@ -755,46 +778,40 @@ void Render::TemporalAccumulation() {
   glActiveTexture(GL_TEXTURE12);
   glBindTexture(GL_TEXTURE_2D, depth_texture[1 - current_frame % 2]);
 
-  ReprojectionCB cb = {};
   for (unsigned i = 0; i < 4; i++) {
     for (unsigned j = 0; j < 4; j++) {
-      cb.prev_view_proj[i][j] = camera.prev_view_proj[i][j];
+      reprojection.prev_view_proj[i][j] = camera.prev_view_proj[i][j];
     }
   }
 
   auto inv_view_proj = glm::inverse(camera.view_proj);
   for (unsigned i = 0; i < 4; i++) {
     for (unsigned j = 0; j < 4; j++) {
-      cb.inv_view_proj[i][j] = inv_view_proj[i][j];
+      reprojection.inv_view_proj[i][j] = inv_view_proj[i][j];
     }
   }
 
   for (unsigned i = 0; i < 4; i++) {
     for (unsigned j = 0; j < 4; j++) {
-      cb.view_proj[i][j] = camera.view_proj[i][j];
+      reprojection.view_proj[i][j] = camera.view_proj[i][j];
     }
   }
 
   for (unsigned i = 0; i < 4; i++) {
     for (unsigned j = 0; j < 4; j++) {
-      cb.proj[i][j] = camera.proj[i][j];
+      reprojection.proj[i][j] = camera.proj[i][j];
     }
   }
 
   for (unsigned i = 0; i < 3; i++) {
-    cb.view_pos[i] = camera.offset[i];
+    reprojection.view_pos[i] = camera.offset[i];
   }
-  cb.view_pos[3] = 1.0f;
-  cb.target_dim[0] = 1280;
-  cb.target_dim[1] = 720;
-  cb.alpha_illum = 0.05f;
-  cb.alpha_moments = 0.05f;
-  cb.phi_depth = 0.2f;
-  cb.phi_normal = 0.3f;
-  cb.frame_number = current_frame;
+  reprojection.view_pos[3] = 1.0f;
+  reprojection.frame_number = current_frame;
 
   glBindBuffer(GL_UNIFORM_BUFFER, reprojection_buffer);
-  glBufferData(GL_UNIFORM_BUFFER, sizeof(ReprojectionCB), &cb, GL_DYNAMIC_DRAW);
+  glBufferData(GL_UNIFORM_BUFFER, sizeof(ReprojectionCB), &reprojection,
+               GL_DYNAMIC_DRAW);
 
   glBindBufferBase(GL_UNIFORM_BUFFER, 0, reprojection_buffer);
 

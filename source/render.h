@@ -32,6 +32,9 @@ public:
     float angle;
     float speed;
 
+    float near{0.1f};
+    float far{100.0f};
+
     float distance;
 
     glm::vec3 offset;
@@ -48,7 +51,7 @@ public:
       angle += delta * speed;
 
       prev_view_proj = view_proj;
-      proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.0f, 0.1f, 50.0f);
+      proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.0f, near, far);
       view_proj =
           proj * glm::lookAt(offset, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
     }
@@ -100,13 +103,17 @@ private:
     float prev_view_proj[4][4];
     float proj[4][4];
     float view_pos[4];
-    float target_dim[2];
-    float alpha_illum;
-    float alpha_moments;
-    float phi_depth;
-    float phi_normal;
+    float target_dim[2]{1250.0f, 720.0f};
+    float alpha_illum{0.05f};
+    float alpha_moments{0.05f};
+    float phi_depth{0.369f};
+    float phi_normal{0.3f};
+    float depth_tolerance{0.75};
+    float normal_tolerance{0.75};
+    float min_accum_weight{0.15};
     int frame_number;
   };
+  ReprojectionCB reprojection = {};
 
   bool temporal_accumulation{true};
 
@@ -114,6 +121,7 @@ private:
   GLuint moment_texture[2];
   GLuint history_length[2];
   GLuint reprojection_buffer;
+
 
   struct Geometry {
     GLuint vertex_buffer;

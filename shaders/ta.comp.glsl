@@ -43,6 +43,9 @@ layout(binding = 0, std140) uniform Reprojection {
   float alpha_moments;
   float phi_depth;
   float phi_normal;
+  float depth_tolerance;
+  float normal_tolerance;
+  float min_accum_weight;
   int frame_number;
 }
 uniforms;
@@ -170,13 +173,14 @@ void main() {
 
       float depth_prev = texelFetch(t_prev_depth, pos, 0).x;
       if (depth_weight(depth_prev, current_depth, current_world_normal.xyz,
-                       ray_dir, uniforms.proj, uniforms.phi_depth) < 0.75) {
+                       ray_dir, uniforms.proj,
+                       uniforms.phi_depth) < uniforms.depth_tolerance) {
         continue;
       }
 
       vec3 normal_prev = texelFetch(t_prev_normal, pos, 0).xyz;
       if (normal_weight(normal_prev, current_world_normal.xyz,
-                        uniforms.phi_normal) < 0.75) {
+                        uniforms.phi_normal) < uniforms.normal_tolerance) {
         continue;
       }
 
@@ -241,7 +245,7 @@ void main() {
       }
     }
 
-    if (accum_weight >= 0.15) {
+    if (accum_weight >= uniforms.min_accum_weight) {
       vec3 prev_color = accum_illuminance / accum_weight;
       vec2 prev_moments = accum_moments / accum_weight;
 
