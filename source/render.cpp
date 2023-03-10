@@ -197,7 +197,6 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.speed = 1.0;
   camera.angle = 0.0;
   camera.distance = 20.0;
 
@@ -320,7 +319,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::BmfrDenoiser();
+  current_denoiser = new Denoiser::NoneDenoiser();
 
   camera.Update(16 / 1000.0);
 }
@@ -515,7 +514,7 @@ void Render::SetSceneOpenGL(Scene *scene) {
 
 void Render::DrawFeatureBuffers() {
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, features_fbo[current_frame % 2]);
-  glClearColor(0.0, 0.0, 0.0, 0.0);
+  glClearColor(0.0, 0.0, 0.0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
   camera.Update(16 / 1000.0);
@@ -574,6 +573,8 @@ void Render::DrawGUI() {
   ImGui::SliderFloat("Camera.far", &camera.far, 10.0f, 320.0f);
   ImGui::SliderFloat("Camera.near", &camera.near, 0.01, 1.0f);
 
+  ImGui::SliderFloat("Camera.speed", &camera.speed, 0.01, 45.0f);
+
   ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
 
   if (temporal_accumulation) {
@@ -597,7 +598,7 @@ void Render::DrawGUI() {
       "optix",
       "none",
   };
-  static int chosen = 0;
+  static int chosen = 3;
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
     {
       for (auto i = 0; i < 4; i++) {
@@ -747,7 +748,18 @@ bool Render::Update() {
 
   DrawDenoise();
 
-  TemporalAccumulationDenoised();
+  if (current_denoiser->DidSomething()) {
+    TemporalAccumulationDenoised();
+  } else {
+    glCopyImageSubData(accumulated_noisy_texture[current_frame % 2],
+                       GL_TEXTURE_2D, 0, 0, 0, 0,
+                       accumulated_denoised_texture[current_frame % 2],
+                       GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
+
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+  }
+
+  glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
   glClearColor(1.0, 0.9, 0.8, 1.0);

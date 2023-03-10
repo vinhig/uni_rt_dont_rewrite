@@ -15,5 +15,7 @@ public:
                  GLuint albedo_texture) override {
     return noisy_texture;
   };
+
+  bool DidSomething() override { return false; }
 };
 } // namespace UniRt::Denoiser

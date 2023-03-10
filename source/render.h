@@ -31,7 +31,7 @@ public:
 
   struct RotatingCamera {
     float angle;
-    float speed;
+    float speed{0.0};
 
     float near{0.1f};
     float far{100.0f};
@@ -110,9 +110,9 @@ private:
     float alpha_illum{0.05f};
     float alpha_moments{0.05f};
     float phi_depth{0.369f};
-    float phi_normal{0.3f};
-    float depth_tolerance{0.75};
-    float normal_tolerance{0.75};
+    float phi_normal{0.45f};
+    float depth_tolerance{0.70};
+    float normal_tolerance{0.70};
     float min_accum_weight{0.15};
     int frame_number;
   };

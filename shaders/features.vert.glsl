@@ -22,7 +22,7 @@ out vec2 o_uv;
 
 void main() {
   o_position = (transform * vec4(position, 1.0)).xyz;
-  o_normal = normalize(normal);
+  o_normal = normalize(inverse(transpose(mat3(transform))) * normal);
   o_uv = uv;
 
   o_instance_id = instance_id + 1;

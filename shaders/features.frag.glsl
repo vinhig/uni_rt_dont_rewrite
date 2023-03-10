@@ -14,6 +14,6 @@ layout(location = 1) out vec4 normal;
 
 void main() {
   position = vec4(o_position, 1.0);
-  normal = vec4(o_normal, 1.0);
+  normal = vec4(normalize(o_normal), 1.0);
   // visibility = uvec4(o_instance_id, o_geometry_id, o_prim_id, 0);
 }
