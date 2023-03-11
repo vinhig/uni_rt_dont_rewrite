@@ -21,6 +21,7 @@
 #include "scene.h"
 #include "util.h"
 
+#include "denoisers/a-svgf.h"
 #include "denoisers/bmfr.h"
 #include "denoisers/none.h"
 
@@ -50,7 +51,7 @@ out vec4 color;
 void main(void){ 
 	ivec2 uv = ivec2(gl_FragCoord.x, gl_FragCoord.y);
 
-	color = vec4(texelFetch(denoised, uv, 0).xyz * texelFetch(albedo, uv, 0).xyz, 1.0);
+	color = vec4(texelFetch(denoised, uv, 0).xyz /* texelFetch(albedo, uv, 0).xyz*/, 1.0);
 
   // Apply gamma correction
   color = pow(color, vec4(1.0/2.2));
@@ -163,6 +164,7 @@ Render::Render() {
 
   transform_location = glGetUniformLocation(features_program, "transform");
   view_proj_location = glGetUniformLocation(features_program, "view_proj");
+  instance_id_location = glGetUniformLocation(features_program, "instance_id");
 
   {
     std::ifstream features_ta_file("../shaders/ta.comp.glsl");
@@ -210,7 +212,7 @@ Render::Render() {
   glGenTextures(2, noisy_accumulation.history_length);
   glGenTextures(2, denoised_accumulation.moment_texture);
   glGenTextures(2, denoised_accumulation.history_length);
-  // glGenTextures(1, &visibility_texture);
+  glGenTextures(2, visibility_texture);
 
   for (int i = 0; i < 2; i++) {
     glBindTexture(GL_TEXTURE_2D, position_texture[i]);
@@ -225,12 +227,11 @@ Render::Render() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    // glBindTexture(GL_TEXTURE_2D, visibility_texture);
-    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, 1280, 720, 0,
-    // GL_RGBA_INTEGER,
-    //              GL_UNSIGNED_INT, nullptr);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, visibility_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, 1280, 720, 0, GL_RED_INTEGER,
+                 GL_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glBindTexture(GL_TEXTURE_2D, depth_texture[i]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 1280, 720, 0,
@@ -279,18 +280,17 @@ Render::Render() {
                            position_texture[i], 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
                            normal_texture[i], 0);
-    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2,
-    // GL_TEXTURE_2D,
-    //                        visibility_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
+                           visibility_texture[i], 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
                            depth_texture[i], 0);
 
     GLenum draw_buffers[] = {
         GL_COLOR_ATTACHMENT0,
         GL_COLOR_ATTACHMENT1,
+        GL_COLOR_ATTACHMENT2,
     };
-    // GL_COLOR_ATTACHMENT2};
-    glDrawBuffers(2, draw_buffers);
+    glDrawBuffers(3, draw_buffers);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
       printf("oh noooo\n");
@@ -319,7 +319,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::NoneDenoiser();
+  current_denoiser = new Denoiser::ASvgfDenoiser();
 
   camera.Update(16 / 1000.0);
 }
@@ -520,6 +520,7 @@ void Render::DrawFeatureBuffers() {
   camera.Update(16 / 1000.0);
 
   glUseProgram(features_program);
+  int instance_id = 0;
   for (auto &instance : instances) {
     glUniformMatrix4fv(transform_location, 1, GL_FALSE,
                        &instance.transform[0][0]);
@@ -527,11 +528,13 @@ void Render::DrawFeatureBuffers() {
                        &camera.view_proj[0][0]);
 
     for (auto &geometry : instance.geometries) {
+      glUniform1i(instance_id_location, instance_id);
       glBindVertexArray(geometry.vao);
       // glBindBuffer(GL_ARRAY_BUFFER, geometry.vertex_buffer);
       // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, geometry.index_buffer);
       glDrawElements(GL_TRIANGLES, geometry.triangle_count * 3, GL_UNSIGNED_INT,
                      NULL);
+      instance_id += 1;
     }
   }
 
@@ -594,11 +597,11 @@ void Render::DrawGUI() {
   // a list of options in imgui containing "bmfr", "none", "optix"
   static char *denoisers[] = {
       "bmfr",
-      "svgf",
+      "a-svgf",
       "optix",
       "none",
   };
-  static int chosen = 3;
+  static int chosen = 1;
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
     {
       for (auto i = 0; i < 4; i++) {
@@ -610,9 +613,15 @@ void Render::DrawGUI() {
             current_denoiser = new Denoiser::BmfrDenoiser();
             break;
           }
+          case 1: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::ASvgfDenoiser();
+            break;
+          }
           case 3: {
             delete current_denoiser;
             current_denoiser = new Denoiser::NoneDenoiser();
+            break;
           }
           default: {
             break;
@@ -665,10 +674,24 @@ void Render::DrawGUI() {
 }
 
 void Render::DrawDenoise() {
-  denoised_texture[current_frame % 2] = current_denoiser->Denoise(
-      current_frame, accumulated_noisy_texture[current_frame % 2],
-      position_texture[current_frame % 2], normal_texture[current_frame % 2],
-      depth_texture[current_frame % 2], albedo_texture[current_frame % 2]);
+  Denoiser::BunchOfTexture bunch_of_textures;
+  bunch_of_textures.noisy_texture[0] = accumulated_noisy_texture[0];
+  bunch_of_textures.noisy_texture[1] = accumulated_noisy_texture[1];
+  bunch_of_textures.position_texture[0] = position_texture[0];
+  bunch_of_textures.position_texture[1] = position_texture[1];
+  bunch_of_textures.normal_texture[0] = normal_texture[0];
+  bunch_of_textures.normal_texture[1] = normal_texture[1];
+  bunch_of_textures.visibility_texture[0] = visibility_texture[0];
+  bunch_of_textures.visibility_texture[1] = visibility_texture[1];
+  bunch_of_textures.albedo_texture[0] = albedo_texture[0];
+  bunch_of_textures.albedo_texture[1] = albedo_texture[1];
+  bunch_of_textures.depth_texture[0] = depth_texture[0];
+  bunch_of_textures.depth_texture[1] = depth_texture[1];
+
+  bunch_of_textures.reprojection_buffer = reprojection_buffer;
+
+  denoised_texture[current_frame % 2] =
+      current_denoiser->Denoise(bunch_of_textures, current_frame);
 }
 
 void Render::DrawEmbree() {
@@ -736,7 +759,8 @@ bool Render::Update() {
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
                img_albedo.data());
 
-  if (temporal_accumulation) {
+  if (temporal_accumulation &&
+      current_denoiser->NeedPreTemporalAccumulation()) {
     TemporalAccumulationNoisy();
   } else {
     glCopyImageSubData(shadow_texture[current_frame % 2], GL_TEXTURE_2D, 0, 0,
@@ -748,10 +772,10 @@ bool Render::Update() {
 
   DrawDenoise();
 
-  if (current_denoiser->DidSomething()) {
+  if (current_denoiser->NeedPostTemporalAccumulation()) {
     TemporalAccumulationDenoised();
   } else {
-    glCopyImageSubData(accumulated_noisy_texture[current_frame % 2],
+    glCopyImageSubData(denoised_texture[current_frame % 2],
                        GL_TEXTURE_2D, 0, 0, 0, 0,
                        accumulated_denoised_texture[current_frame % 2],
                        GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
@@ -837,10 +861,16 @@ void Render::TemporalAccumulationNoisy() {
   // t_curr_depth
   glActiveTexture(GL_TEXTURE11);
   glBindTexture(GL_TEXTURE_2D, depth_texture[current_frame % 2]);
-
   // t_prev_depth
   glActiveTexture(GL_TEXTURE12);
   glBindTexture(GL_TEXTURE_2D, depth_texture[1 - current_frame % 2]);
+
+  // t_curr_visibility
+  glActiveTexture(GL_TEXTURE13);
+  glBindTexture(GL_TEXTURE_2D, visibility_texture[current_frame % 2]);
+  // t_prev_visibility
+  glActiveTexture(GL_TEXTURE14);
+  glBindTexture(GL_TEXTURE_2D, visibility_texture[1 - current_frame % 2]);
 
   for (unsigned i = 0; i < 4; i++) {
     for (unsigned j = 0; j < 4; j++) {

@@ -28,7 +28,8 @@ add_executable(uni_rt_dont_rewrite
     source/util.cpp
     source/embree_utils.cpp
     
-    source/denoisers/bmfr.cpp)
+    source/denoisers/bmfr.cpp
+    source/denoisers/a-svgf.cpp)
 
 
 target_include_directories(uni_rt_dont_rewrite PUBLIC imgui/)

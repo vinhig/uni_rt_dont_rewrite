@@ -4,18 +4,23 @@
 #include "denoiser.h"
 
 namespace UniRt::Denoiser {
-struct NoneDenoiser : Denoiser {
+struct ASvgfDenoiser : Denoiser {
 public:
-  NoneDenoiser() { printf("hello from none denoiser\n"); };
-  
-  ~NoneDenoiser() = default;
+  ASvgfDenoiser();
+  ~ASvgfDenoiser();
 
   bool NeedPreTemporalAccumulation() override { return false; }
 
-  GLuint Denoise(BunchOfTexture &textures, int current_frame) override {
-    return textures.noisy_texture[current_frame % 2];
-  };
+  GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
 
   bool NeedPostTemporalAccumulation() override { return false; }
+
+private:
+  GLuint gradient_image_program{0};
+
+  GLuint gradient_texture[2];
+
+  BunchOfTexture textures;
 };
+
 } // namespace UniRt::Denoiser

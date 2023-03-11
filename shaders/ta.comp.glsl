@@ -2,6 +2,8 @@
 
 // Original implementation from
 // https://github.com/JuanDiegoMontoya/Fwog/blob/examples-refactor/example/shaders/rsm/Reproject2.comp.glsl
+// Main modificiations:
+// - use of a vibility buffer to early stop accumulation
 
 const uint k_radius = 1;
 const uint k_width = 1 + 2 * k_radius;
@@ -31,6 +33,9 @@ layout(binding = 9, r8ui) uniform restrict uimage2D t_out_history_length;
 
 layout(binding = 11) uniform sampler2D t_curr_depth;
 layout(binding = 12) uniform sampler2D t_prev_depth;
+
+layout(binding = 13) uniform isampler2D t_curr_visibility;
+layout(binding = 14) uniform isampler2D t_prev_visibility;
 
 layout(binding = 0, std140) uniform Reprojection {
   mat4 view_proj;
@@ -136,19 +141,14 @@ void main() {
 
   // Reproject this pixel
   float current_depth = texelFetch(t_curr_depth, curr_coord, 0).x;
-  // NDC_curFrame -> world
   vec3 current_world_position =
       unproject_uv(current_depth, uv, uniforms.inv_view_proj);
-  // world -> NDC_prevFrame
-  vec4 clipPosPrev =
+  vec4 clip_pos_prev =
       uniforms.prev_view_proj * vec4(current_world_position, 1.0);
-  vec3 ndcPosPrev = clipPosPrev.xyz / clipPosPrev.w;
-  vec3 reprojected_uv = ndcPosPrev;
-  reprojected_uv.xy = ndcPosPrev.xy * 0.5 + 0.5;
-  // From OpenGL Z convention [-1, 1] -> [0, 1].
-  // In other APIs (or with glClipControl(..., GL_ZERO_TO_ONE)) you would not do
-  // this.
-  reprojected_uv.z = ndcPosPrev.z * 0.5 + 0.5;
+  vec3 ndc_pos_prev = clip_pos_prev.xyz / clip_pos_prev.w;
+  vec3 reprojected_uv = ndc_pos_prev;
+  reprojected_uv.xy = ndc_pos_prev.xy * 0.5 + 0.5;
+  reprojected_uv.z = ndc_pos_prev.z * 0.5 + 0.5;
 
   vec3 ray_dir = normalize(current_world_position - uniforms.view_pos.xyz).xyz;
 

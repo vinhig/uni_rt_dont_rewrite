@@ -83,7 +83,7 @@ private:
   GLuint features_fbo[2];
   GLuint position_texture[2];
   GLuint normal_texture[2];
-  // GLuint visibility_texture;
+  GLuint visibility_texture[2];
   GLuint depth_texture[2];
 
   GLuint quad_program;
@@ -94,8 +94,6 @@ private:
   GLuint transform_location;
   GLuint view_proj_location;
   GLuint instance_id_location;
-  GLuint geometry_id_location;
-  GLuint prim_id_location;
 
   GLuint shadow_texture[2];
   GLuint albedo_texture[2];

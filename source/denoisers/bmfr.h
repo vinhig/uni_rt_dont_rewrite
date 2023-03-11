@@ -28,11 +28,12 @@ private:
 public:
   BmfrDenoiser();
   ~BmfrDenoiser();
-  GLuint Denoise(unsigned current_frame, GLuint noisy_texture,
-                 GLuint position_texture, GLuint normal_texture,
-                 GLuint depth_texture, GLuint albedo_texture) override;
 
-  bool DidSomething() override { return true; }
+  bool NeedPreTemporalAccumulation() override { return true; }
+
+  GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
+
+  bool NeedPostTemporalAccumulation() override { return true; }
 };
 
 } // namespace UniRt::Denoiser

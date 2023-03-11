@@ -70,25 +70,23 @@ BmfrDenoiser::BmfrDenoiser() {
                GL_DYNAMIC_DRAW);
 }
 
-GLuint BmfrDenoiser::Denoise(unsigned current_frame, GLuint noisy_texture,
-                             GLuint position_texture, GLuint normal_texture,
-                             GLuint depth_texture, GLuint albedo_texture) {
+GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glUseProgram(bmfr_program);
 
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, position_texture);
+  glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame%2]);
 
   glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, normal_texture);
+  glBindTexture(GL_TEXTURE_2D, textures.normal_texture[current_frame%2]);
 
   glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, depth_texture);
+  glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame%2]);
 
   glActiveTexture(GL_TEXTURE3);
-  glBindTexture(GL_TEXTURE_2D, noisy_texture);
+  glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame%2]);
 
   glActiveTexture(GL_TEXTURE8);
-  glBindTexture(GL_TEXTURE_2D, albedo_texture);
+  glBindTexture(GL_TEXTURE_2D, textures.albedo_texture[current_frame%2]);
 
   glBindImageTexture(4, out_fitting_texture, 0, 0, 0, GL_READ_WRITE, GL_R32F);
 
