@@ -49,12 +49,12 @@ layout(binding = 1) uniform sampler2D albedo;
 out vec4 color;
 
 void main(void){ 
-	ivec2 uv = ivec2(gl_FragCoord.x, gl_FragCoord.y);
+	vec2 uv = vec2(gl_FragCoord.x, gl_FragCoord.y) / vec2(1280, 720);
 
-	color = vec4(texelFetch(denoised, uv, 0).xyz /* texelFetch(albedo, uv, 0).xyz*/, 1.0);
+	color = vec4(texture(denoised, uv, 0).xyz /* texture(albedo, uv, 0).xyz*/, 1.0);
 
   // Apply gamma correction
-  color = pow(color, vec4(1.0/2.2));
+  // color = pow(color, vec4(1.0/2.2));
 })";
 
 static void GLAPIENTRY OglDebugOutput(GLenum source, GLenum type, GLuint id,
@@ -88,8 +88,8 @@ GLuint CompileShader(const char *path, const char *source, GLenum shaderType) {
     printf("%s -> %s\n", path, errorMsg);
     throw std::runtime_error(errorMsg);
   }
-  auto err = glGetError();
-  assert(err == GL_NO_ERROR);
+  // auto err = glGetError();
+  // assert(err == GL_NO_ERROR);
 
   return shader;
 }
@@ -747,6 +747,41 @@ bool Render::Update() {
 
   bool quit = UpdateSDL();
 
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      reprojection.prev_view_proj[i][j] = camera.prev_view_proj[i][j];
+    }
+  }
+
+  auto inv_view_proj = glm::inverse(camera.view_proj);
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      reprojection.inv_view_proj[i][j] = inv_view_proj[i][j];
+    }
+  }
+
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      reprojection.view_proj[i][j] = camera.view_proj[i][j];
+    }
+  }
+
+  for (unsigned i = 0; i < 4; i++) {
+    for (unsigned j = 0; j < 4; j++) {
+      reprojection.proj[i][j] = camera.proj[i][j];
+    }
+  }
+
+  for (unsigned i = 0; i < 3; i++) {
+    reprojection.view_pos[i] = camera.offset[i];
+  }
+  reprojection.view_pos[3] = 1.0f;
+  reprojection.frame_number = current_frame;
+
+  glBindBuffer(GL_UNIFORM_BUFFER, reprojection_buffer);
+  glBufferData(GL_UNIFORM_BUFFER, sizeof(ReprojectionCB), &reprojection,
+               GL_DYNAMIC_DRAW);
+
   DrawFeatureBuffers();
 
   DrawEmbree();
@@ -775,12 +810,12 @@ bool Render::Update() {
   if (current_denoiser->NeedPostTemporalAccumulation()) {
     TemporalAccumulationDenoised();
   } else {
-    glCopyImageSubData(denoised_texture[current_frame % 2],
-                       GL_TEXTURE_2D, 0, 0, 0, 0,
-                       accumulated_denoised_texture[current_frame % 2],
-                       GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
+    // glCopyImageSubData(denoised_texture[current_frame % 2],
+    //                    GL_TEXTURE_2D, 0, 0, 0, 0,
+    //                    accumulated_denoised_texture[current_frame % 2],
+    //                    GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
 
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    // glMemoryBarrier(GL_ALL_BARRIER_BITS);
   }
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
@@ -792,7 +827,7 @@ bool Render::Update() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(quad_program);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, accumulated_denoised_texture[current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, denoised_texture[current_frame % 2]);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -871,41 +906,6 @@ void Render::TemporalAccumulationNoisy() {
   // t_prev_visibility
   glActiveTexture(GL_TEXTURE14);
   glBindTexture(GL_TEXTURE_2D, visibility_texture[1 - current_frame % 2]);
-
-  for (unsigned i = 0; i < 4; i++) {
-    for (unsigned j = 0; j < 4; j++) {
-      reprojection.prev_view_proj[i][j] = camera.prev_view_proj[i][j];
-    }
-  }
-
-  auto inv_view_proj = glm::inverse(camera.view_proj);
-  for (unsigned i = 0; i < 4; i++) {
-    for (unsigned j = 0; j < 4; j++) {
-      reprojection.inv_view_proj[i][j] = inv_view_proj[i][j];
-    }
-  }
-
-  for (unsigned i = 0; i < 4; i++) {
-    for (unsigned j = 0; j < 4; j++) {
-      reprojection.view_proj[i][j] = camera.view_proj[i][j];
-    }
-  }
-
-  for (unsigned i = 0; i < 4; i++) {
-    for (unsigned j = 0; j < 4; j++) {
-      reprojection.proj[i][j] = camera.proj[i][j];
-    }
-  }
-
-  for (unsigned i = 0; i < 3; i++) {
-    reprojection.view_pos[i] = camera.offset[i];
-  }
-  reprojection.view_pos[3] = 1.0f;
-  reprojection.frame_number = current_frame;
-
-  glBindBuffer(GL_UNIFORM_BUFFER, reprojection_buffer);
-  glBufferData(GL_UNIFORM_BUFFER, sizeof(ReprojectionCB), &reprojection,
-               GL_DYNAMIC_DRAW);
 
   glBindBufferBase(GL_UNIFORM_BUFFER, 0, reprojection_buffer);
 

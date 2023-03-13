@@ -16,6 +16,7 @@ public:
   bool NeedPostTemporalAccumulation() override { return false; }
 
 private:
+  GLuint gradient_reproject_program{0};
   GLuint gradient_image_program{0};
 
   GLuint gradient_texture[2];

@@ -104,10 +104,10 @@ private:
     float prev_view_proj[4][4];
     float proj[4][4];
     float view_pos[4];
-    float target_dim[2]{1250.0f, 720.0f};
+    float target_dim[2]{1280.0f, 720.0f};
     float alpha_illum{0.05f};
     float alpha_moments{0.05f};
-    float phi_depth{0.369f};
+    float phi_depth{0.595};
     float phi_normal{0.45f};
     float depth_tolerance{0.70};
     float normal_tolerance{0.70};

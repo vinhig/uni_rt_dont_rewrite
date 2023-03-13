@@ -13,6 +13,22 @@ GLuint CompileShader(const char *path, const char *source, GLenum shaderType);
 namespace Denoiser {
 ASvgfDenoiser::ASvgfDenoiser() {
   {
+    std::ifstream comp_file("../shaders/asvgf_gradient_reproject.comp.glsl");
+    std::ostringstream comp_ss;
+    comp_ss << comp_file.rdbuf();
+    std::string comp_source = comp_ss.str();
+
+    GLuint comp_shader =
+        CompileShader("../shader/asvgf_gradient_reproject.comp.glsl",
+                      comp_source.c_str(), GL_COMPUTE_SHADER);
+
+    gradient_reproject_program = glCreateProgram();
+    glAttachShader(gradient_reproject_program, comp_shader);
+    glLinkProgram(gradient_reproject_program);
+
+    glDeleteShader(comp_shader);
+  }
+  {
     std::ifstream comp_file("../shaders/asvgf_gradient_img.comp.glsl");
     std::ostringstream comp_ss;
     comp_ss << comp_file.rdbuf();
@@ -32,7 +48,7 @@ ASvgfDenoiser::ASvgfDenoiser() {
 
   for (int i = 0; i < 2; i++) {
     glBindTexture(GL_TEXTURE_2D, gradient_texture[i]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280/3, 720/3, 0, GL_RGBA, GL_FLOAT,
                  nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -45,7 +61,7 @@ ASvgfDenoiser::~ASvgfDenoiser() {}
 
 GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
-  glUseProgram(gradient_image_program);
+  glUseProgram(gradient_reproject_program);
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame % 2]);
@@ -79,7 +95,9 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
   glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
 
-  glDispatchCompute(1280 / 16, 720 / 16, 1);
+  unsigned group_size_pixels = 24;
+  glDispatchCompute((1280 + group_size_pixels - 1) / group_size_pixels,
+                    (720 + group_size_pixels - 1) / group_size_pixels, 1);
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 

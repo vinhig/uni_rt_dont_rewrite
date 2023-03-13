@@ -1,5 +1,7 @@
 #version 430 core
 
+#define GRAD_DWN (3)
+
 layout(binding = 0) uniform sampler2D t_curr_position;
 layout(binding = 1) uniform sampler2D t_prev_position;
 layout(binding = 2) uniform sampler2D t_curr_normal;
@@ -130,7 +132,7 @@ float reproject_pixel_luminance() {
     return luminance(texelFetch(t_prev_sample, prev_coord, 0).rgb);
   }
 
-  return -1.0;
+  return 0.0;
 }
 
 void main() {
@@ -143,10 +145,6 @@ void main() {
   float curr_luminance = luminance(texelFetch(t_curr_sample, ipos, 0).rgb);
   float prev_luminance = reproject_pixel_luminance();
 
-  if (prev_luminance == -1.0) {
-    return;
-  } else {
-    float grad = prev_luminance - curr_luminance;
-    imageStore(t_out_gradient, ipos, vec4((vec3(grad) + 1.0) / 2, 1.0));
-  }
+  float grad = prev_luminance - curr_luminance;
+  imageStore(t_out_gradient, ipos, vec4((vec3(grad) + 1.0) / 2, 1.0));
 }
