@@ -31,7 +31,7 @@ public:
 
   struct RotatingCamera {
     float angle;
-    float speed{0.0};
+    float speed{1.0f};
 
     float near{0.1f};
     float far{100.0f};
@@ -83,8 +83,10 @@ private:
   GLuint features_fbo[2];
   GLuint position_texture[2];
   GLuint normal_texture[2];
+  GLuint geo_normal_texture[2];
   GLuint visibility_texture[2];
   GLuint depth_texture[2];
+  GLuint motion_texture[2];
 
   GLuint quad_program;
   GLuint features_program;

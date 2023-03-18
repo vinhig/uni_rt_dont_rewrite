@@ -68,25 +68,28 @@ BmfrDenoiser::BmfrDenoiser() {
   glBindBuffer(GL_UNIFORM_BUFFER, per_frame_buffer);
   glBufferData(GL_UNIFORM_BUFFER, sizeof(PerFrameCB), &per_frame,
                GL_DYNAMIC_DRAW);
+
+  printf("hello from bmfr denoiser\n");
 }
 
 GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
+  glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "BMFR REGRESSION");
   glUseProgram(bmfr_program);
 
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame%2]);
+  glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame % 2]);
 
   glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, textures.normal_texture[current_frame%2]);
+  glBindTexture(GL_TEXTURE_2D, textures.normal_texture[current_frame % 2]);
 
   glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame%2]);
+  glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
 
   glActiveTexture(GL_TEXTURE3);
-  glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame%2]);
+  glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
 
   glActiveTexture(GL_TEXTURE8);
-  glBindTexture(GL_TEXTURE_2D, textures.albedo_texture[current_frame%2]);
+  glBindTexture(GL_TEXTURE_2D, textures.albedo_texture[current_frame % 2]);
 
   glBindImageTexture(4, out_fitting_texture, 0, 0, 0, GL_READ_WRITE, GL_R32F);
 
@@ -113,6 +116,8 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glDispatchCompute(w * h, 1, 1);
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+  glPopDebugGroup();
 
   return denoised_texture[current_frame % 2];
 }

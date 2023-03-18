@@ -8,11 +8,6 @@
 #include "util.ih"
 #include <embree3/rtcore.isph>
 
-struct ViewParams {
-    float3 pos, dir_du, dir_dv, dir_top_left;
-    uint32_t frame_id;
-};
-
 struct MaterialParams {
     float3 base_color;
     float metallic;
@@ -214,8 +209,8 @@ export void trace_rays(void *uniform _scene,
         const uint32_t fb_px = ((j + tile->y) * tile->fb_width + i + tile->x) * 4;
 
         RTCRayHit path_ray;
+        float3 org = make_float3(tile->position[fb_px], tile->position[fb_px + 1], tile->position[fb_px + 2]);
         {
-            float3 org = make_float3(tile->position[fb_px], tile->position[fb_px + 1], tile->position[fb_px + 2]);
 
             if (all_zero(org)) {
                 continue;
@@ -335,6 +330,9 @@ export void trace_rays(void *uniform _scene,
         tile->shadow[px_id + 0] = (tile->albedo[px_id + 0] < 0.01) ? 0.0 : (illum.x / tile->albedo[px_id + 0]);
         tile->shadow[px_id + 1] = (tile->albedo[px_id + 1] < 0.01) ? 0.0 : (illum.y / tile->albedo[px_id + 1]);
         tile->shadow[px_id + 2] = (tile->albedo[px_id + 2] < 0.01) ? 0.0 : (illum.z / tile->albedo[px_id + 2]);
+        // tile->shadow[px_id + 0] = tile->position[fb_px + 0];
+        // tile->shadow[px_id + 1] = tile->position[fb_px + 1];
+        // tile->shadow[px_id + 2] = tile->position[fb_px + 2];
     }
 }
 
