@@ -55,6 +55,8 @@ private:
   GLuint hist_color_texture[2];
   // GLuint gradient_a_trous_texture[2];
 
+  GLuint blue_noise_texture;
+
   BunchOfTexture textures;
 };
 

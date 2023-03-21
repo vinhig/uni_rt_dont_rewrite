@@ -5,6 +5,9 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <string.h>
+
+#include "../stb_image.h"
 
 namespace UniRt {
 
@@ -94,6 +97,41 @@ ASvgfDenoiser::ASvgfDenoiser() {
       glGetUniformLocation(gradient_atrous_program, "push_iteration");
   uniform_color_push_iteration_location =
       glGetUniformLocation(color_atrous_program, "push_iteration");
+  // Load blue noise texture hehehe
+  {
+    glGenTextures(1, &blue_noise_texture);
+    glBindTexture(GL_TEXTURE_3D, blue_noise_texture);
+
+    unsigned char *data = new unsigned char[256 * 256 * 4 * 128];
+
+    for (int i = 0; i < 128; i++) {
+      int w, h, n;
+      char buf[1024];
+
+      snprintf(buf, sizeof buf,
+               "../textures/blue_noise/256_256/HDR_RGBA_%04d.png", i);
+
+      stbi_uc *img_data = stbi_load(buf, &w, &h, &n, 4);
+
+      if (img_data == NULL) {
+        printf("Couldn't load blue noise texture '%s'\n", buf);
+      }
+
+      printf("w=>%d, h=>%d, n=>%d, i=>%d\n", w, h, n, i);
+
+      memcpy(&data[256 * 256 * 4 * i], img_data,
+             256 * 256 * 4 * sizeof(unsigned char));
+
+      stbi_image_free(img_data);
+    }
+
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, 256, 256, 128, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, data);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    delete data;
+  }
 
   glGenTextures(2, gradient_reproject_texture);
   glGenTextures(2, gradient_texture);
@@ -430,6 +468,9 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glBindTexture(GL_TEXTURE_2D, hist_moments_texture[current_frame % 2]);
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, hist_moments_texture[1 - current_frame % 2]);
+
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_3D, blue_noise_texture);
 
     glBindImageTexture(13, moment_ping_texture, 0, 0, 0, GL_READ_WRITE,
                        GL_RGBA32F);

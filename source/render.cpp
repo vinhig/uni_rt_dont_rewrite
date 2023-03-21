@@ -122,6 +122,7 @@ Render::Render() {
 
   gladLoadGLLoader(SDL_GL_GetProcAddress);
 
+  glEnable(GL_TEXTURE_3D);
   glEnable(GL_DEBUG_OUTPUT);
   glDebugMessageCallback(OglDebugOutput, nullptr);
 
@@ -337,7 +338,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::ASvgfDenoiser();
+  current_denoiser = new Denoiser::BmfrDenoiser();
 }
 
 void Render::SetupEmbree() {
@@ -613,7 +614,7 @@ void Render::DrawGUI() {
       "optix",
       "none",
   };
-  static int chosen = 1;
+  static int chosen = 0;
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
     {
       for (auto i = 0; i < 4; i++) {

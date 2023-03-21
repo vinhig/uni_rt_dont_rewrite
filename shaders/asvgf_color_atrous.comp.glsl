@@ -19,7 +19,7 @@ layout(binding = 9) uniform sampler2D tex_prev_motion;
 layout(binding = 10) uniform sampler2D tex_curr_hist_moments;
 layout(binding = 11) uniform sampler2D tex_prev_hist_moments;
 
-// layout(binding = 12) uniform sampler3D tex_blue_noise;
+layout(binding = 12) uniform sampler3D tex_blue_noise;
 
 layout(binding = 13, rgba32f) uniform restrict image2D img_atrous_ping_moments;
 layout(binding = 14, rgba32f) uniform restrict image2D img_atrous_pong_moments;
@@ -37,8 +37,8 @@ layout(binding = 21) uniform sampler2D tex_hist_color;
 layout(binding = 22, rgba32f) uniform restrict image2D img_hist_color;
 
 #define BLUE_NOISE_RES (256)
-#define NUM_BLUE_NOISE_TEX (128 * 4)
-#define STORAGE_SCALE_HF 32
+#define NUM_BLUE_NOISE_TEX (128)
+// #define STORAGE_SCALE_HF 32
 
 uniform int push_iteration;
 
@@ -142,19 +142,19 @@ void filter_image(sampler2D img_color, sampler2D img_moments, out vec3 filtered,
   // patterns
   // TODO!
   ivec2 jitter = ivec2(0.0);
-  // {
-  //   int texnum = int(uniforms.frame_number);
-  //   ivec2 texpos = ipos & ivec2(BLUE_NOISE_RES - 1);
-  //   float jitter_x =
-  //       texelFetch(tex_blue_noise,
-  //                  ivec3(texpos, (texnum + 0) & (NUM_BLUE_NOISE_TEX - 1)), 0)
-  //           .r;
-  //   float jitter_y =
-  //       texelFetch(tex_blue_noise,
-  //                  ivec3(texpos, (texnum + 1) & (NUM_BLUE_NOISE_TEX - 1)), 0)
-  //           .r;
-  //   jitter = ivec2((vec2(jitter_x, jitter_y) - 0.5) * float(step_size));
-  // }
+  {
+    int texnum = int(uniforms.frame_number);
+    ivec2 texpos = ipos & ivec2(BLUE_NOISE_RES - 1);
+    float jitter_x =
+        texelFetch(tex_blue_noise,
+                   ivec3(texpos, (texnum + 0) & (NUM_BLUE_NOISE_TEX - 1)), 0)
+            .r;
+    float jitter_y =
+        texelFetch(tex_blue_noise,
+                   ivec3(texpos, (texnum + 1) & (NUM_BLUE_NOISE_TEX - 1)), 0)
+            .r;
+    jitter = ivec2((vec2(jitter_x, jitter_y) - 0.5) * float(step_size));
+  }
 
   const int r = 1;
 
