@@ -157,7 +157,12 @@ struct Tile {
     float *shadow; // output by embree
     float *position; // input by opengl
     float *normal; // input by opengl
+
+    uint32_t *curr_rng_seed;
+    uint32_t *prev_rng_seed;
+
     uint16_t *ray_stats;
+
 
     float camera_x, camera_y, camera_z;
 

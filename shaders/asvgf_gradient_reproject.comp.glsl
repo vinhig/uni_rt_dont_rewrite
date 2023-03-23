@@ -35,7 +35,11 @@ layout(binding = 7) uniform isampler2D t_prev_visibility;
 layout(binding = 8) uniform sampler2D t_curr_sample;
 layout(binding = 9) uniform sampler2D t_prev_sample;
 
-layout(binding = 10) uniform restrict writeonly image2D t_out_gradient;
+layout(binding = 10) uniform isampler2D t_curr_rng_seed;
+layout(binding = 11) uniform isampler2D t_prev_rng_seed;
+
+layout(binding = 12) uniform restrict writeonly image2D t_out_gradient;
+layout(binding = 13) uniform restrict writeonly iimage2D t_out_rng_seed;
 
 shared vec4 reprojected_pixels[GROUP_SIZE_PIXELS][GROUP_SIZE_PIXELS];
 
@@ -169,6 +173,8 @@ void main() {
   // pos_grad is the position inside the 1280/3x720/3 texture yes yes
   ivec2 pos_grad = ipos / (GRAD_DWN);
 
+  imageStore(t_out_rng_seed, ipos, ivec4(0));
+
   // Reproject the current pixel
   // Won't save it in the texture as i thought before
   // but rather in a shared buffer -> gonna be sorted in the second pass (find a
@@ -217,19 +223,11 @@ void main() {
 
   if (!found) {
     imageStore(t_out_gradient, pos_grad, vec4(0.0, 0.0, 0.0, 1.0));
+    imageStore(t_out_rng_seed, ipos, ivec4(0));
     return;
   }
 
   imageStore(t_out_gradient, pos_grad, found_prev_lum);
-
-  // // Check out of bounds
-  // if (any(greaterThanEqual(ipos, ivec2(1280, 720)))) {
-  //   return;
-  // }
-
-  // float curr_luminance = luminance(texelFetch(t_curr_sample, ipos, 0).rgb);
-  // float prev_luminance = reproject_pixel_luminance();
-
-  // float grad = prev_luminance - curr_luminance;
-  // imageStore(t_out_gradient, ipos, vec4((vec3(grad) + 1.0) / 2, 1.0));
+  imageStore(t_out_rng_seed, ipos,
+             ivec4(texelFetch(t_curr_rng_seed, found_pos_prev, 0)));
 }

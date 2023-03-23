@@ -117,8 +117,6 @@ ASvgfDenoiser::ASvgfDenoiser() {
         printf("Couldn't load blue noise texture '%s'\n", buf);
       }
 
-      printf("w=>%d, h=>%d, n=>%d, i=>%d\n", w, h, n, i);
-
       memcpy(&data[256 * 256 * 4 * i], img_data,
              256 * 256 * 4 * sizeof(unsigned char));
 
@@ -267,7 +265,15 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[1 - current_frame % 2]);
 
-    glBindImageTexture(10, gradient_reproject_texture[current_frame % 2], 0, 0,
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, textures.rng_seed_texture[current_frame % 2]);
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, textures.rng_seed_texture[1-current_frame % 2]);
+
+    glBindImageTexture(12, gradient_reproject_texture[1-current_frame % 2], 0, 0,
+                       0, GL_READ_WRITE, GL_RGBA32F);
+
+    glBindImageTexture(13, textures.rng_seed_texture[current_frame % 2], 0, 0,
                        0, GL_READ_WRITE, GL_RGBA32F);
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);

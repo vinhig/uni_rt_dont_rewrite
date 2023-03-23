@@ -77,6 +77,7 @@ private:
   std::vector<std::vector<float>> tiles_albedo;
   std::vector<float> position_texture_pixels;
   std::vector<float> normal_texture_pixels;
+  std::vector<uint32_t> rng_seed_texture_pixels[2];
 
   unsigned current_frame{0};
 
@@ -87,6 +88,7 @@ private:
   GLuint visibility_texture[2];
   GLuint depth_texture[2];
   GLuint motion_texture[2];
+  GLuint rng_seed_texture[2];
 
   GLuint quad_program;
   GLuint features_program;

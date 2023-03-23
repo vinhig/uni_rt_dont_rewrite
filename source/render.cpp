@@ -216,6 +216,7 @@ Render::Render() {
   glGenTextures(2, denoised_accumulation.moment_texture);
   glGenTextures(2, denoised_accumulation.history_length);
   glGenTextures(2, visibility_texture);
+  glGenTextures(2, rng_seed_texture);
 
   for (int i = 0; i < 2; i++) {
     glBindTexture(GL_TEXTURE_2D, position_texture[i]);
@@ -243,6 +244,12 @@ Render::Render() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glBindTexture(GL_TEXTURE_2D, visibility_texture[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, 1280, 720, 0, GL_RED_INTEGER,
+                 GL_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glBindTexture(GL_TEXTURE_2D, rng_seed_texture[i]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, 1280, 720, 0, GL_RED_INTEGER,
                  GL_INT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -338,7 +345,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::BmfrDenoiser();
+  current_denoiser = new Denoiser::ASvgfDenoiser();
 }
 
 void Render::SetupEmbree() {
@@ -358,6 +365,9 @@ void Render::SetupEmbree() {
 
   position_texture_pixels.resize(1280 * 720 * 4, 0.0f);
   normal_texture_pixels.resize(1280 * 720 * 4, 0.0f);
+
+  rng_seed_texture_pixels[0].resize(1280 * 720 * 4, 0.0f);
+  rng_seed_texture_pixels[1].resize(1280 * 720 * 4, 0.0f);
 
   for (int i = 0; i < tiles_color.size(); i++) {
     tiles_color[i].resize(tile_size.x * tile_size.y * 3, 0.f);
@@ -614,7 +624,7 @@ void Render::DrawGUI() {
       "optix",
       "none",
   };
-  static int chosen = 0;
+  static int chosen = 1;
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
     {
       for (auto i = 0; i < 4; i++) {
@@ -706,6 +716,8 @@ void Render::DrawDenoise() {
   bunch_of_textures.geo_normal_texture[1] = geo_normal_texture[1];
   bunch_of_textures.motion_texture[0] = motion_texture[0];
   bunch_of_textures.motion_texture[1] = motion_texture[1];
+  bunch_of_textures.rng_seed_texture[0] = rng_seed_texture[0];
+  bunch_of_textures.rng_seed_texture[1] = rng_seed_texture[1];
 
   bunch_of_textures.reprojection_buffer = reprojection_buffer;
 
@@ -745,6 +757,9 @@ void Render::DrawEmbree() {
     ispc_tile.albedo = tiles_albedo[tile_id].data();
     ispc_tile.position = position_texture_pixels.data();
     ispc_tile.normal = normal_texture_pixels.data();
+    ispc_tile.curr_rng_seed = rng_seed_texture_pixels[current_frame % 2].data();
+    ispc_tile.prev_rng_seed =
+        rng_seed_texture_pixels[1 - current_frame % 2].data();
     ispc_tile.camera_x = camera.offset.x;
     ispc_tile.camera_y = camera.offset.y;
     ispc_tile.camera_z = camera.offset.z;
@@ -826,6 +841,10 @@ bool Render::Update() {
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 normal_texture_pixels.data());
 
+  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[current_frame % 2]);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA_INTEGER, GL_INT,
+                rng_seed_texture_pixels[current_frame % 2].data());
+
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   DrawEmbree();
@@ -837,6 +856,10 @@ bool Render::Update() {
   glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
                img_albedo.data());
+
+  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1 - current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32I, 1280, 720, 0, GL_RGBA_INTEGER,
+               GL_INT, rng_seed_texture_pixels[1 - current_frame % 2].data());
 
   glFinish();
   glMemoryBarrier(GL_ALL_BARRIER_BITS);

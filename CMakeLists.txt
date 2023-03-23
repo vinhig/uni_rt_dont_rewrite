@@ -42,6 +42,9 @@ target_link_libraries(uni_rt_dont_rewrite imgui)
 target_link_libraries(uni_rt_dont_rewrite glm)
 target_link_libraries(uni_rt_dont_rewrite TBB::tbb)
 
+# set(ISPC_COMPILE_DEFNS "-O3;--opt=fast-math;-g")
+set(ISPC_COMPILE_DEFNS "-g")
+
 add_ispc_library(ispc_kernels source/embree/embree.ispc
 	INCLUDE_DIRECTORIES
         ${EMBREE_INCLUDE_DIRS}

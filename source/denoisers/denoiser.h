@@ -14,6 +14,7 @@ struct BunchOfTexture {
   GLuint depth_texture[2];
   GLuint geo_normal_texture[2];
   GLuint motion_texture[2];
+  GLuint rng_seed_texture[2];
 
   // reprojection uniform buffer
   GLuint reprojection_buffer;

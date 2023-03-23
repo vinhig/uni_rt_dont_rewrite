@@ -60,6 +60,9 @@ struct Tile {
     float *uniform position;
     float *uniform normal;
 
+    uint32_t *uniform curr_rng_seed;
+    uint32_t *uniform prev_rng_seed;
+
     uint16_t *uniform ray_stats;
 
     float camera_x, camera_y, camera_z;
@@ -200,13 +203,21 @@ export void trace_rays(void *uniform _scene,
         const uint32_t j = ray / tile->width;
 
         float3 illum = make_float3(0.0);
-        LCGRand rng = get_rng((tile->x + i + (tile->y + j) * tile->fb_width),
-                                tile->frame_id + 1);
 
-        const float px_x = (i + tile->x + lcg_randomf(rng)) / tile->fb_width;
-        const float px_y = (j + tile->y + lcg_randomf(rng)) / tile->fb_height;
+        const float px_x = (i + tile->x) / tile->fb_width;
+        const float px_y = (j + tile->y) / tile->fb_height;
 
         const uint32_t fb_px = ((j + tile->y) * tile->fb_width + i + tile->x) * 4;
+
+        LCGRand rng;
+        if (tile->curr_rng_seed[fb_px] == 0) {
+            rng = get_rng((tile->x + i + (tile->y + j) * tile->fb_width),
+                                tile->frame_id + 1);
+        } else {
+            rng.state = tile->curr_rng_seed[fb_px];
+        }
+
+        tile->prev_rng_seed[fb_px] = rng.state;
 
         RTCRayHit path_ray;
         float3 org = make_float3(tile->position[fb_px], tile->position[fb_px + 1], tile->position[fb_px + 2]);
