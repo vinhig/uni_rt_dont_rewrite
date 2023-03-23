@@ -223,11 +223,20 @@ void main() {
 
   if (!found) {
     imageStore(t_out_gradient, pos_grad, vec4(0.0, 0.0, 0.0, 1.0));
-    imageStore(t_out_rng_seed, ipos, ivec4(0));
+    for (int xx = 0; xx < GRAD_DWN; xx++) {
+      for (int yy = 0; yy < GRAD_DWN; yy++) {
+        imageStore(t_out_rng_seed, ipos + ivec2(xx, yy), ivec4(0));
+      }
+    }
+
     return;
   }
 
   imageStore(t_out_gradient, pos_grad, found_prev_lum);
-  imageStore(t_out_rng_seed, ipos,
-             ivec4(texelFetch(t_curr_rng_seed, found_pos_prev, 0)));
+  for (int xx = 0; xx < GRAD_DWN; xx++) {
+    for (int yy = 0; yy < GRAD_DWN; yy++) {
+      imageStore(t_out_rng_seed, ipos + ivec2(xx, yy),
+                 ivec4(texelFetch(t_prev_rng_seed, found_pos_prev, 0)));
+    }
+  }
 }
