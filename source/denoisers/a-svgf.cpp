@@ -274,7 +274,7 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
                        0, GL_READ_WRITE, GL_RGBA32F);
 
     glBindImageTexture(13, textures.rng_seed_texture[current_frame % 2], 0, 0,
-                       0, GL_READ_WRITE, GL_RGBA32F);
+                       0, GL_READ_WRITE, GL_RGBA32I);
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
 

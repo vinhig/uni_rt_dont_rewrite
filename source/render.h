@@ -43,6 +43,7 @@ public:
     glm::mat4 proj;
     glm::mat4 view_proj;
     glm::mat4 prev_view_proj;
+    glm::vec3 center;
 
     void Update(double delta) {
       offset.x = cos(angle) * distance;
@@ -54,7 +55,7 @@ public:
       prev_view_proj = view_proj;
       proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.0f, near, far);
       view_proj =
-          proj * glm::lookAt(offset, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+          proj * glm::lookAt(offset, center, glm::vec3(0, 1, 0));
     }
   };
 
@@ -167,6 +168,8 @@ private:
   std::vector<QuadLight> lights;
   std::vector<Image> textures;
   std::vector<embree::ISPCTexture2D> ispc_textures;
+
+  embree::ISPCTexture2D blue_noise_texture_ispc[128];
 
   void SetupEmbree();
 

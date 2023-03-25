@@ -3,6 +3,8 @@
 #include "util.ih"
 #include "lcg_rng.ih"
 #include "float3.ih"
+#include "texture2d.ih"
+#include "blue_noise_rng.ih"
 
 /* Disney BSDF functions, for additional details and examples see:
  * - https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
@@ -362,19 +364,19 @@ float disney_pdf(const DisneyMaterial &mat, const float3 &n,
  * ray reflection direction (w_i) and sample PDF.
  */
 float3 sample_disney_brdf(const DisneyMaterial &mat, const float3 &n,
-	const float3 &w_o, const float3 &v_x, const float3 &v_y, LCGRand &rng,
+	const float3 &w_o, const float3 &v_x, const float3 &v_y, ISPCTexture2D *uniform blue_noise, uint32_t rng, uint32_t bounce,
 	float3 &w_i, float &pdf)
 {
 	int component = 0;
 	if (mat.specular_transmission == 0.f) {
-		component = lcg_randomf(rng) * 3.f;
+		component = random_blue_noise(blue_noise, RNG_NEE_LIGHT_TYPE(bounce), rng) * 3.f;
 		component = clamp(component, 0, 2);
 	} else {
-		component = lcg_randomf(rng) * 4.f;
+		component = random_blue_noise(blue_noise, RNG_NEE_LIGHT_TYPE(bounce), rng) * 4.f;
 		component = clamp(component, 0, 3);
 	}
 
-	float2 samples = make_float2(lcg_randomf(rng), lcg_randomf(rng));
+	float2 samples = make_float2(random_blue_noise(blue_noise, RNG_BRDF_X(bounce), rng), random_blue_noise(blue_noise, RNG_BRDF_Y(bounce), rng));
 	if (component == 0) {
 		// Sample diffuse component
 		w_i = sample_lambertian_dir(n, v_x, v_y, samples);

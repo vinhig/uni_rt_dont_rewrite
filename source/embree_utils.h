@@ -167,5 +167,7 @@ struct Tile {
     float camera_x, camera_y, camera_z;
 
     uint32_t frame_id;
+
+    ISPCTexture2D *blue_noise;
 };
 }

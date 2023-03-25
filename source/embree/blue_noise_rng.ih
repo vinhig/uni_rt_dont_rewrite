@@ -1,0 +1,38 @@
+#pragma once
+
+#define BLUE_NOISE_RES          (256)
+#define NUM_BLUE_NOISE_TEX      (128)
+#define RNG_SEED_SHIFT_X        0u
+#define RNG_SEED_SHIFT_Y        8u
+#define RNG_SEED_SHIFT_ISODD    16u
+#define RNG_SEED_SHIFT_FRAME    17u
+
+#define RNG_NEE_LIGHT_SELECTION(bounce)   (4 + 0 + 9 * bounce)
+#define RNG_NEE_TRI_X(bounce)             (4 + 1 + 9 * bounce)
+#define RNG_NEE_TRI_Y(bounce)             (4 + 2 + 9 * bounce)
+#define RNG_NEE_LIGHT_TYPE(bounce)        (4 + 3 + 9 * bounce)
+#define RNG_BRDF_X(bounce)                (4 + 4 + 9 * bounce)
+#define RNG_BRDF_Y(bounce)                (4 + 5 + 9 * bounce)
+#define RNG_BRDF_FRESNEL(bounce)          (4 + 6 + 9 * bounce)
+#define RNG_SUNLIGHT_X(bounce)			  (4 + 7 + 9 * bounce)
+#define RNG_SUNLIGHT_Y(bounce)			  (4 + 8 + 9 * bounce)
+#define RNG_TERMINATION(bounce)			  (4 + 9 + 9 * bounce)
+
+
+float random_blue_noise(ISPCTexture2D *uniform tex, uint32_t idx, uint32_t rng_seed) {
+    int2 uv = make_int2(rng_seed >> RNG_SEED_SHIFT_X, rng_seed >> RNG_SEED_SHIFT_Y);
+    int layer = rng_seed >> RNG_SEED_SHIFT_ISODD;
+
+    layer = (layer >> 1) + (layer & 1);
+    layer += idx;
+
+    uv.x &= BLUE_NOISE_RES - 1;
+    uv.y &= BLUE_NOISE_RES - 1;
+    layer &= NUM_BLUE_NOISE_TEX - 1;
+
+    float4 noise = get_texel(&tex[layer], uv);
+
+    // print("%\n", noise.x);
+
+    return min(noise.x, 0.99999999999);
+}

@@ -1,12 +1,14 @@
 #include "../texture_channel_mask.h"
 #include "disney_bsdf.ih"
 #include "float3.ih"
-#include "lcg_rng.ih"
+// #include "lcg_rng.ih"
 #include "lights.ih"
 #include "mat4.ih"
 #include "texture2d.ih"
 #include "util.ih"
 #include <embree3/rtcore.isph>
+
+#include "blue_noise_rng.ih"
 
 struct MaterialParams {
     float3 base_color;
@@ -68,7 +70,11 @@ struct Tile {
     float camera_x, camera_y, camera_z;
 
     uint32_t frame_id;
+
+    ISPCTexture2D *uniform blue_noise;
 };
+
+
 
 float textured_scalar_param(const float x,
                             const float2 &uv,
@@ -119,20 +125,22 @@ float3 sample_direct_light(const SceneContext *uniform scene,
                            RTCIntersectContext *uniform incoherent_context,
                            QuadLight *uniform lights,
                            uniform uint32_t num_lights,
-                           LCGRand &rng)
+                           ISPCTexture2D *uniform blue_noise, uint32_t rng, uint32_t bounce)
 {
     float3 illum = make_float3(0.f);
 
-    uint32_t light_id = lcg_randomf(rng) * num_lights;
+    uint32_t light_id = random_blue_noise(blue_noise, RNG_NEE_LIGHT_SELECTION(bounce), rng) * num_lights;
     light_id = min(light_id, num_lights - 1);
     QuadLight light = lights[light_id];
 
     RTCRay shadow_ray;
 
     // Sample the light to compute an incident light ray to this point
-    {
+    {   
+        float light_x = random_blue_noise(blue_noise, RNG_SUNLIGHT_X(bounce), rng);
+        float light_y = random_blue_noise(blue_noise, RNG_SUNLIGHT_Y(bounce), rng);
         float3 light_pos =
-            sample_quad_light_position(light, make_float2(lcg_randomf(rng), lcg_randomf(rng)));
+            sample_quad_light_position(light, make_float2(light_x, light_y));
         float3 light_dir = light_pos - hit_p;
         float light_dist = length(light_dir);
         light_dir = normalize(light_dir);
@@ -155,7 +163,9 @@ float3 sample_direct_light(const SceneContext *uniform scene,
     {
         float3 w_i;
         float bsdf_pdf;
-        float3 bsdf = sample_disney_brdf(mat, n, w_o, v_x, v_y, rng, w_i, bsdf_pdf);
+        float3 bsdf = sample_disney_brdf(
+            mat, n, w_o, v_x, v_y, blue_noise, rng, bounce, w_i, bsdf_pdf
+        );
 
         float light_dist;
         float3 light_pos;
@@ -195,10 +205,6 @@ export void trace_rays(void *uniform _scene,
         tile->shadow[px_id + 1] =  0.0;
         tile->shadow[px_id + 2] =  0.0;
 
-        tile->albedo[px_id] = 0.0;
-        tile->albedo[px_id + 1] = 0.0;
-        tile->albedo[px_id + 2] = 0.0;
-
         const uint32_t i = mod(ray, tile->width);
         const uint32_t j = ray / tile->width;
 
@@ -209,15 +215,25 @@ export void trace_rays(void *uniform _scene,
 
         const uint32_t fb_px = ((j + tile->y) * tile->fb_width + i + tile->x) * 4;
 
-        LCGRand rng;
-        if (tile->curr_rng_seed[fb_px] == 0) {
-            rng = get_rng((tile->x + i + (tile->y + j) * tile->fb_width),
-                                tile->frame_id + 1);
-        } else {
-            rng.state = tile->curr_rng_seed[fb_px];
-        }
+        tile->albedo[px_id] = 0.0;
+        tile->albedo[px_id + 1] = 0.0;
+        tile->albedo[px_id + 2] = 0.0;
 
-        tile->prev_rng_seed[fb_px] = rng.state;
+        uint32_t rng = tile->curr_rng_seed[fb_px];
+
+        // print("rng: %\n", rng);
+        // print("random: %\n", random_blue_noise(tile->blue_noise, RNG_BRDF_X(4), rng));
+
+        // if (tile->curr_rng_seed[fb_px] == 0) {
+        //     rng = get_rng((tile->x + i + (tile->y + j) * tile->fb_width),
+        //                         tile->frame_id + 1);
+        // } else {
+        //     rng.state = tile->curr_rng_seed[fb_px];
+        // }
+
+        tile->prev_rng_seed[fb_px] = rng;
+
+        // random_blue_noise(tile->blue_noise, make_int2(px_x, px_y), tile->curr_rng_seed[fb_px]);
 
         RTCRayHit path_ray;
         float3 org = make_float3(tile->position[fb_px], tile->position[fb_px + 1], tile->position[fb_px + 2]);
@@ -311,12 +327,14 @@ export void trace_rays(void *uniform _scene,
                                                                     &context,
                                                                     scene->lights,
                                                                     scene->num_lights,
-                                                                    rng);
+                                                                    tile->blue_noise,
+                                                                    rng,
+                                                                    bounce);
 
             // Sample the BSDF to continue the ray
             float pdf;
             float3 w_i;
-            float3 bsdf = sample_disney_brdf(mat, normal, w_o, v_x, v_y, rng, w_i, pdf);
+            float3 bsdf = sample_disney_brdf(mat, normal, w_o, v_x, v_y, tile->blue_noise, rng, bounce, w_i, pdf);
             if (pdf == 0.f || all_zero(bsdf)) {
                 break;
             }
@@ -331,7 +349,8 @@ export void trace_rays(void *uniform _scene,
                 const float q = max(0.05f,
                                     1.f - max(path_throughput.x,
                                                 max(path_throughput.y, path_throughput.z)));
-                if (lcg_randomf(rng) < q) {
+                float termination = random_blue_noise(tile->blue_noise, RNG_TERMINATION(bounce), rng);
+                if (termination < q) {
                     break;
                 }
                 path_throughput = path_throughput / (1.f - q);
@@ -366,4 +385,3 @@ export void tile_to_buffer(void *uniform _tile, uniform float *uniform shadow, u
         albedo[fb_px + 3] = 1.0f;
     }
 }
-

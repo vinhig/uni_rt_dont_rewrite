@@ -25,6 +25,8 @@
 #include "denoisers/bmfr.h"
 #include "denoisers/none.h"
 
+#include "stb_image.h"
+
 const std::string fullscreen_quad_vs = R"(
 #version 430 core
 
@@ -124,6 +126,7 @@ Render::Render() {
 
   glEnable(GL_TEXTURE_3D);
   glEnable(GL_DEBUG_OUTPUT);
+  glDisable(GL_CULL_FACE);
   glDebugMessageCallback(OglDebugOutput, nullptr);
 
   ImGui::CreateContext();
@@ -200,8 +203,10 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.angle = 0.0;
-  camera.distance = 20.0;
+  camera.angle = 0.0f;
+  camera.speed = 0.0f;
+  camera.distance = 5.0f;
+  camera.center = glm::vec3(0.0f, 2.0f, 0.0f);
 
   glGenFramebuffers(2, features_fbo);
   glGenTextures(2, position_texture);
@@ -250,7 +255,7 @@ Render::Render() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glBindTexture(GL_TEXTURE_2D, rng_seed_texture[i]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, 1280, 720, 0, GL_RED_INTEGER,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32I, 1280, 720, 0, GL_RGBA_INTEGER,
                  GL_INT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -447,6 +452,31 @@ void Render::SetSceneEmbree(UniRt::Scene *scene) {
   }
 
   lights = scene->lights;
+
+  for (int i = 0; i < 128; i++) {
+    int w, h, n;
+    char buf[1024];
+
+    snprintf(buf, sizeof buf,
+             "../textures/blue_noise/256_256/HDR_RGBA_%04d.png", i);
+
+    stbi_uc *img_data = stbi_load(buf, &w, &h, &n, 4);
+
+    if (img_data == NULL) {
+      printf("Couldn't load blue noise texture '%s'\n", buf);
+    }
+
+    blue_noise_texture_ispc[i].width = w;
+    blue_noise_texture_ispc[i].height = h;
+    blue_noise_texture_ispc[i].channels = n;
+    blue_noise_texture_ispc[i].data =
+        static_cast<uint8_t*>(malloc(sizeof(unsigned char) * w * h * n));
+
+    memcpy((void*)blue_noise_texture_ispc[0].data, img_data,
+           256 * 256 * 4 * sizeof(unsigned char));
+
+    stbi_image_free(img_data);
+  }
 }
 
 void Render::SetSceneOpenGL(Scene *scene) {
@@ -764,6 +794,7 @@ void Render::DrawEmbree() {
     ispc_tile.camera_y = camera.offset.y;
     ispc_tile.camera_z = camera.offset.z;
     ispc_tile.frame_id = current_frame;
+    ispc_tile.blue_noise = &blue_noise_texture_ispc[0];
 
     ispc::trace_rays(&ispc_scene, &ispc_tile);
 
@@ -841,7 +872,7 @@ bool Render::Update() {
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 normal_texture_pixels.data());
 
-  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1-current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA_INTEGER, GL_INT,
                 rng_seed_texture_pixels[current_frame % 2].data());
 

@@ -14,6 +14,12 @@
 #define GRAD_DWN (3)
 #define GROUP_SIZE_GRAD 8
 #define GROUP_SIZE_PIXELS (GROUP_SIZE_GRAD * GRAD_DWN)
+#define BLUE_NOISE_RES (256)
+#define NUM_BLUE_NOISE_TEX (128)
+#define RNG_SEED_SHIFT_X 0u
+#define RNG_SEED_SHIFT_Y 8u
+#define RNG_SEED_SHIFT_ISODD 16u
+#define RNG_SEED_SHIFT_FRAME 17u
 
 #extension GL_ARB_enhanced_layouts : enable // to be allowed to use compile time
                                             // expression in some place (as in
@@ -39,7 +45,7 @@ layout(binding = 10) uniform isampler2D t_curr_rng_seed;
 layout(binding = 11) uniform isampler2D t_prev_rng_seed;
 
 layout(binding = 12) uniform restrict writeonly image2D t_out_gradient;
-layout(binding = 13) uniform restrict writeonly iimage2D t_out_rng_seed;
+layout(binding = 13, r32i) uniform restrict writeonly iimage2D t_out_rng_seed;
 
 shared vec4 reprojected_pixels[GROUP_SIZE_PIXELS][GROUP_SIZE_PIXELS];
 
@@ -167,13 +173,29 @@ void reproject_pixel(ivec2 ipos) {
   }
 }
 
+uint generate_rng_seed(ivec2 ipos) {
+  int frame_num = int(uniforms.frame_number);
+
+  uint frame_offset = frame_num / NUM_BLUE_NOISE_TEX;
+
+  uint rng_seed = 0;
+  rng_seed |= (uint(ipos.x + frame_offset) % BLUE_NOISE_RES)
+              << RNG_SEED_SHIFT_X;
+  rng_seed |= (uint(ipos.y + (frame_offset << 4)) % BLUE_NOISE_RES)
+              << RNG_SEED_SHIFT_Y;
+  rng_seed |= uint(false) << RNG_SEED_SHIFT_ISODD;
+  rng_seed |= uint(frame_num) << RNG_SEED_SHIFT_FRAME;
+
+  return rng_seed;
+}
+
 void main() {
   // ipos is the position inside the 1280x720 texture yes yes
   ivec2 ipos = ivec2(gl_GlobalInvocationID);
   // pos_grad is the position inside the 1280/3x720/3 texture yes yes
   ivec2 pos_grad = ipos / (GRAD_DWN);
 
-  imageStore(t_out_rng_seed, ipos, ivec4(0));
+  imageStore(t_out_rng_seed, ipos, ivec4(generate_rng_seed(ipos)));
 
   // Reproject the current pixel
   // Won't save it in the texture as i thought before
@@ -223,20 +245,10 @@ void main() {
 
   if (!found) {
     imageStore(t_out_gradient, pos_grad, vec4(0.0, 0.0, 0.0, 1.0));
-    for (int xx = 0; xx < GRAD_DWN; xx++) {
-      for (int yy = 0; yy < GRAD_DWN; yy++) {
-        imageStore(t_out_rng_seed, ipos + ivec2(xx, yy), ivec4(0));
-      }
-    }
-
     return;
   }
 
   imageStore(t_out_gradient, pos_grad, found_prev_lum);
-  for (int xx = 0; xx < GRAD_DWN; xx++) {
-    for (int yy = 0; yy < GRAD_DWN; yy++) {
-      imageStore(t_out_rng_seed, ipos + ivec2(xx, yy),
-                 ivec4(texelFetch(t_prev_rng_seed, found_pos_prev, 0)));
-    }
-  }
+  imageStore(t_out_rng_seed, ipos + found_offset,
+             ivec4(texelFetch(t_prev_rng_seed, found_pos_prev, 0)));
 }

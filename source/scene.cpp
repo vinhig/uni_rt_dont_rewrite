@@ -20,6 +20,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <map>
+
 namespace std {
 template <> struct hash<glm::uvec2> {
   size_t operator()(glm::uvec2 const &v) const {
@@ -98,6 +100,34 @@ void Scene::load_gltf(const std::string &fname) {
 
   if (model.defaultScene == -1) {
     model.defaultScene = 0;
+  }
+
+  // Find lights
+  for (const auto &node : model.nodes) {
+    // if (node.extensions.contains("KHR_lights_punctual")) {
+    //   auto l = node.extensions["KHR_lights_punctual"]; //
+    //   ["light"].GetNumberAsInt();
+    // }
+
+    if (node.extensions.count("KHR_lights_punctual") != 0) {
+      auto l = node.extensions.at("KHR_lights_punctual");
+      auto l_idx = l.Get("light").GetNumberAsInt();
+
+      auto lig = model.lights[l_idx];
+
+      QuadLight light;
+      light.emission = glm::vec4(lig.intensity) * 0.05f *
+                       glm::vec4(lig.color[0], lig.color[1], lig.color[2], 1.0);
+      light.normal = glm::vec4(glm::normalize(glm::vec3(0.0f, -1.0, 0.0f)), 0);
+      ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
+      light.width = 1.f;
+      light.height = 1.f;
+      light.position = glm::vec4(node.translation[0], node.translation[1],
+                                 node.translation[2], 1.0);
+
+      std::cout << "Adding light" << std::endl;
+      lights.push_back(light);
+    }
   }
 
   flatten_gltf(model);
