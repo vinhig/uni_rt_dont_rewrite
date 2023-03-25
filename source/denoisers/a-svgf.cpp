@@ -133,8 +133,8 @@ ASvgfDenoiser::ASvgfDenoiser() {
 
   glGenTextures(2, gradient_reproject_texture);
   glGenTextures(2, gradient_texture);
-  glGenTextures(2, hist_moments_texture);
-  glGenTextures(2, hist_color_texture);
+  glGenTextures(2, moments_texture);
+  glGenTextures(1, &hist_len_texture);
 
   glGenTextures(1, &gradient_ping_texture);
   glGenTextures(1, &gradient_pong_texture);
@@ -144,6 +144,14 @@ ASvgfDenoiser::ASvgfDenoiser() {
   glGenTextures(1, &moment_pong_texture);
   glGenTextures(1, &atrous_ping_texture);
   glGenTextures(1, &atrous_pong_texture);
+
+  glGenTextures(1, &debug_texture);
+
+  glBindTexture(GL_TEXTURE_2D, debug_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+               nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
   glBindTexture(GL_TEXTURE_2D, gradient_ping_texture);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280 / 3, 720 / 3, 0, GL_RGBA,
@@ -193,6 +201,12 @@ ASvgfDenoiser::ASvgfDenoiser() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+  glBindTexture(GL_TEXTURE_2D, hist_len_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, 1280, 720, 0, GL_RED_INTEGER,
+               GL_UNSIGNED_BYTE, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
   for (int i = 0; i < 2; i++) {
     glBindTexture(GL_TEXTURE_2D, gradient_reproject_texture[i]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280 / 3, 720 / 3, 0, GL_RGBA,
@@ -206,13 +220,7 @@ ASvgfDenoiser::ASvgfDenoiser() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glBindTexture(GL_TEXTURE_2D, hist_moments_texture[i]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
-                 nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    glBindTexture(GL_TEXTURE_2D, hist_color_texture[i]);
+    glBindTexture(GL_TEXTURE_2D, moments_texture[i]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
                  nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -237,44 +245,32 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glUseProgram(gradient_reproject_program);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.position_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, textures.normal_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE3);
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D,
                   textures.normal_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE4);
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE5);
+    glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, textures.depth_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.visibility_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.visibility_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE8);
+    glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE9);
+    glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE10);
+    glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, textures.rng_seed_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, textures.rng_seed_texture[1-current_frame % 2]);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D,
+                  textures.rng_seed_texture[1 - current_frame % 2]);
 
-    glBindImageTexture(12, gradient_reproject_texture[1-current_frame % 2], 0, 0,
+    glBindImageTexture(8, gradient_reproject_texture[current_frame % 2], 0, 0,
                        0, GL_READ_WRITE, GL_RGBA32F);
 
-    glBindImageTexture(13, textures.rng_seed_texture[current_frame % 2], 0, 0,
-                       0, GL_READ_WRITE, GL_RGBA32I);
+    glBindImageTexture(9, textures.rng_seed_texture[current_frame % 2], 0, 0, 0,
+                       GL_READ_WRITE, GL_RGBA32I);
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
 
@@ -318,7 +314,7 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
                      "ASVGF A-TROUS GRADIENT");
     glUseProgram(gradient_atrous_program);
 
-    const int num_atrous_iterations_gradient = 7;
+    const int num_atrous_iterations_gradient = 3;
     for (int i = 0; i < num_atrous_iterations_gradient; i++) {
       glUniform1i(uniform_grad_push_iteration_location, i);
 
@@ -359,74 +355,48 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     // TODO: should REALLY bind every fucking textures in one call instead of
     // repeating this pile of shit every time
 
+    // t_curr_normal
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.position_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, textures.normal_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE3);
+    // t_prev_normal
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D,
                   textures.normal_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.geo_normal_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.geo_normal_texture[1 - current_frame % 2]);
+    // t_prev_moments
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, moments_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, textures.depth_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE22);
-    glBindTexture(GL_TEXTURE_2D, textures.motion_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE23);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.motion_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.visibility_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.visibility_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE10);
+    // t_curr_indirect
+    glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, hist_color_texture[0]);
-    // glActiveTexture(GL_TEXTURE13);
-    // glBindTexture(GL_TEXTURE_2D, hist_color_texture[1 - current_frame % 2]);
+    // t_prev_accumulated
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, atrous_pong_texture);
 
-    // glActiveTexture(GL_TEXTURE12);
-    // glBindTexture(GL_TEXTURE_2D, color_ping_texture[current_frame % 2]);
-    // glActiveTexture(GL_TEXTURE13);
-    // glBindTexture(GL_TEXTURE_2D, color_ping_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_2D, hist_moments_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D, hist_moments_texture[1 - current_frame % 2]);
-
-    glBindImageTexture(18, atrous_ping_texture, 0, 0, 0, GL_READ_WRITE,
+    // t_out_accumulated
+    glBindImageTexture(5, atrous_ping_texture, 0, 0, 0, GL_READ_WRITE,
                        GL_RGBA32F);
 
-    glActiveTexture(GL_TEXTURE19);
-    glBindTexture(GL_TEXTURE_2D, gradient_pong_texture);
-
-    glBindImageTexture(20, hist_moments_texture[current_frame % 2], 0, 0, 0,
+    // t_out_moments
+    glBindImageTexture(6, moments_texture[current_frame % 2], 0, 0, 0,
                        GL_READ_WRITE, GL_RGBA32F);
 
-    glBindImageTexture(21, moment_ping_texture, 0, 0, 0, GL_READ_WRITE,
-                       GL_RGBA32F);
+    // t_out_history_length
+    glBindImageTexture(7, hist_len_texture, 0, 0, 0, GL_READ_WRITE, GL_R8UI);
+
+    // t_curr_depth
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
+    // t_prev_depth
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, textures.depth_texture[1 - current_frame % 2]);
+
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, gradient_pong_texture);
+
+    glBindImageTexture(11, debug_texture, 0, 0, 0, GL_READ_WRITE, GL_RGBA32F);
 
     glDispatchCompute((1280 + 14) / 15, (720 + 14) / 15, 1);
 
@@ -471,9 +441,12 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
                   textures.motion_texture[1 - current_frame % 2]);
 
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, hist_moments_texture[current_frame % 2]);
+    glBindTexture(GL_TEXTURE_2D, moments_texture[current_frame % 2]);
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, hist_moments_texture[1 - current_frame % 2]);
+    glBindTexture(GL_TEXTURE_2D, moments_texture[1 - current_frame % 2]);
+
+    glActiveTexture(GL_TEXTURE21);
+    glBindTexture(GL_TEXTURE_2D, hist_len_texture);
 
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_3D, blue_noise_texture);
@@ -498,12 +471,6 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glActiveTexture(GL_TEXTURE20);
     glBindTexture(GL_TEXTURE_2D, atrous_pong_texture);
 
-    glActiveTexture(GL_TEXTURE21);
-    glBindTexture(GL_TEXTURE_2D, hist_color_texture[0]);
-
-    glBindImageTexture(22, hist_color_texture[0], 0, 0, 0, GL_READ_WRITE,
-                       GL_RGBA32F);
-
     const int num_atrous_iterations = 4;
     for (int i = 0; i < 4; i++) {
       glUniform1i(uniform_color_push_iteration_location, i);
@@ -512,6 +479,7 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
     glPopDebugGroup();
   }
+
   return atrous_pong_texture;
 }
 } // namespace Denoiser

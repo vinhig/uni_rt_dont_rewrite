@@ -470,9 +470,9 @@ void Render::SetSceneEmbree(UniRt::Scene *scene) {
     blue_noise_texture_ispc[i].height = h;
     blue_noise_texture_ispc[i].channels = n;
     blue_noise_texture_ispc[i].data =
-        static_cast<uint8_t*>(malloc(sizeof(unsigned char) * w * h * n));
+        static_cast<uint8_t *>(malloc(sizeof(unsigned char) * w * h * n));
 
-    memcpy((void*)blue_noise_texture_ispc[0].data, img_data,
+    memcpy((void *)blue_noise_texture_ispc[0].data, img_data,
            256 * 256 * 4 * sizeof(unsigned char));
 
     stbi_image_free(img_data);
@@ -629,7 +629,11 @@ void Render::DrawGUI() {
   ImGui::SliderFloat("Camera.far", &camera.far, 10.0f, 320.0f);
   ImGui::SliderFloat("Camera.near", &camera.near, 0.01, 1.0f);
 
-  ImGui::SliderFloat("Camera.speed", &camera.speed, 0.01, 2.0f);
+  ImGui::SliderFloat("Camera.speed", &camera.speed, -3.0f, 3.0f);
+
+  if (ImGui::Button("Reset Camera.speed")) {
+    camera.speed = 0.0;
+  }
 
   ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
 
@@ -872,7 +876,7 @@ bool Render::Update() {
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 normal_texture_pixels.data());
 
-  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1-current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1 - current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA_INTEGER, GL_INT,
                 rng_seed_texture_pixels[current_frame % 2].data());
 

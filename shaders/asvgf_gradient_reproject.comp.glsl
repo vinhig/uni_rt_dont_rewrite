@@ -28,24 +28,19 @@
 layout(local_size_x = GROUP_SIZE_PIXELS, local_size_y = GROUP_SIZE_PIXELS,
        local_size_z = 1) in;
 
-layout(binding = 0) uniform sampler2D t_curr_position;
-layout(binding = 1) uniform sampler2D t_prev_position;
-layout(binding = 2) uniform sampler2D t_curr_normal;
-layout(binding = 3) uniform sampler2D t_prev_normal;
-layout(binding = 4) uniform sampler2D t_curr_depth;
-layout(binding = 5) uniform sampler2D t_prev_depth;
+layout(binding = 0) uniform sampler2D t_curr_normal;
+layout(binding = 1) uniform sampler2D t_prev_normal;
+layout(binding = 2) uniform sampler2D t_curr_depth;
+layout(binding = 3) uniform sampler2D t_prev_depth;
 
-layout(binding = 6) uniform isampler2D t_curr_visibility;
-layout(binding = 7) uniform isampler2D t_prev_visibility;
+layout(binding = 4) uniform sampler2D t_curr_sample;
+layout(binding = 5) uniform sampler2D t_prev_sample;
 
-layout(binding = 8) uniform sampler2D t_curr_sample;
-layout(binding = 9) uniform sampler2D t_prev_sample;
+layout(binding = 6) uniform isampler2D t_curr_rng_seed;
+layout(binding = 7) uniform isampler2D t_prev_rng_seed;
 
-layout(binding = 10) uniform isampler2D t_curr_rng_seed;
-layout(binding = 11) uniform isampler2D t_prev_rng_seed;
-
-layout(binding = 12) uniform restrict writeonly image2D t_out_gradient;
-layout(binding = 13, r32i) uniform restrict writeonly iimage2D t_out_rng_seed;
+layout(binding = 8) uniform restrict writeonly image2D t_out_gradient;
+layout(binding = 9, r32i) uniform restrict writeonly iimage2D t_out_rng_seed;
 
 shared vec4 reprojected_pixels[GROUP_SIZE_PIXELS][GROUP_SIZE_PIXELS];
 
@@ -150,8 +145,6 @@ void reproject_pixel(ivec2 ipos) {
 
   // Check if computed sample is the one from current sample
   // According to normals and depth
-  int curr_visibility = texelFetch(t_curr_visibility, ipos, 0).x;
-  int prev_visibility = texelFetch(t_prev_visibility, prev_coord, 0).x;
   float curr_depth = texelFetch(t_curr_depth, ipos, 0).x;
   float prev_depth = texelFetch(t_prev_depth, prev_coord, 0).x;
   vec3 curr_normal = texelFetch(t_curr_normal, ipos, 0).rgb;
@@ -244,7 +237,7 @@ void main() {
   // TODO
 
   if (!found) {
-    imageStore(t_out_gradient, pos_grad, vec4(0.0, 0.0, 0.0, 1.0));
+    imageStore(t_out_gradient, pos_grad, vec4(0.0));
     return;
   }
 

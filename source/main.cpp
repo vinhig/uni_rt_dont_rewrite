@@ -7,9 +7,9 @@ int main() {
 
     auto render = new UniRt::Render();
 
-    auto scene = new UniRt::Scene("/home/vincent/Projects/glTF-Sample-Models/2.0/Sponza/glTF/SponzaLights.gltf");
+    auto scene = new UniRt::Scene("/home/vincent/Documents/delete_me2.gltf");
 
-    render->SetScene(scene, "/home/vincent/Projects/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
+    render->SetScene(scene, "/home/vincent/Documents/delete_me2.gltf");
 
     while (!render->Update()) {
 

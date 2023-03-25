@@ -108,20 +108,6 @@ void main() {
   case 2:
     filtered = filter_image(tex_gradient_ping);
     break;
-  case 3:
-    filtered = filter_image(tex_gradient_pong);
-    break;
-  case 4:
-    filtered = filter_image(tex_gradient_ping);
-    break;
-  case 5:
-    filtered = filter_image(tex_gradient_pong);
-    break;
-  case 6:
-    filtered = filter_image(tex_gradient_ping);
-    // filtered.x = get_gradient(filtered.x, filtered.y);
-    // filtered.y = 0;
-    break;
   }
 
   switch (push_iteration) {
@@ -132,18 +118,6 @@ void main() {
     imageStore(img_gradient_ping, ipos, vec4(filtered, 0, 0));
     break;
   case 2:
-    imageStore(img_gradient_pong, ipos, vec4(filtered, 0, 0));
-    break;
-  case 3:
-    imageStore(img_gradient_ping, ipos, vec4(filtered, 0, 0));
-    break;
-  case 4:
-    imageStore(img_gradient_pong, ipos, vec4(filtered, 0, 0));
-    break;
-  case 5:
-    imageStore(img_gradient_ping, ipos, vec4(filtered, 0, 0));
-    break;
-  case 6:
     imageStore(img_gradient_pong, ipos, vec4(filtered, 0, 0));
     break;
   }

@@ -1,55 +1,40 @@
-#version 430
+#version 430 core
 
-// Original implementation from Q2RTX
-// https://github.com/NVIDIA/Q2RTX/blob/master/src/refresh/vkpt/shader/asvgf_temporal.comp
-// - once again, Q2RTX supports multi GPU, but we don't, so support has been
-// removed
-// - previous position in reprojection is based on a motion vector, here we as
-//   in asvgf_gradient_reproject.com.glsl
+// Original implementation from
+// https://github.com/JuanDiegoMontoya/Fwog/blob/examples-refactor/example/shaders/rsm/Reproject2.comp.glsl
+// Main modificiations:
+// - use of a vibility buffer to early stop accumulation
 
-#extension GL_ARB_enhanced_layouts : enable // to be allowed to use compile time
-                                            // expression in some place (as in
-                                            // layout definition)
+const uint k_radius = 1;
+const uint k_width = 1 + 2 * k_radius;
+const float kernel1D[k_width] = {0.27901, 0.44198, 0.27901};
+const float kernel[k_width][k_width] = {
+    {kernel1D[0] * kernel1D[0], kernel1D[0] * kernel1D[1],
+     kernel1D[0] * kernel1D[2]},
+    {kernel1D[1] * kernel1D[0], kernel1D[1] * kernel1D[1],
+     kernel1D[1] * kernel1D[2]},
+    {kernel1D[2] * kernel1D[0], kernel1D[2] * kernel1D[1],
+     kernel1D[2] * kernel1D[2]},
+};
 
-#define GRAD_DWN (3)
-#define GROUP_SIZE 15
-#define FILTER_RADIUS 1
-#define SHARED_SIZE (GROUP_SIZE + FILTER_RADIUS * 2)
+layout(binding = 0) uniform sampler2D t_curr_normal;
+layout(binding = 1) uniform sampler2D t_prev_normal;
 
-layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE,
-       local_size_z = 1) in;
+layout(binding = 2) uniform sampler2D t_prev_moments;
 
-layout(binding = 0) uniform sampler2D tex_curr_position;
-layout(binding = 1) uniform sampler2D tex_prev_position;
-layout(binding = 2) uniform sampler2D tex_curr_normal;
-layout(binding = 3) uniform sampler2D tex_prev_normal;
-layout(binding = 4) uniform sampler2D tex_curr_geo_normal;
-layout(binding = 5) uniform sampler2D tex_prev_geo_normal;
-layout(binding = 6) uniform sampler2D tex_curr_depth;
-layout(binding = 7) uniform sampler2D tex_prev_depth;
+layout(binding = 3) uniform sampler2D t_curr_indirect;
+layout(binding = 4) uniform sampler2D t_prev_accumulated;
 
-layout(binding = 22) uniform sampler2D tex_curr_motion;
-layout(binding = 23) uniform sampler2D tex_prev_motion;
+layout(binding = 5) uniform restrict writeonly image2D t_out_accumulated;
+layout(binding = 6) uniform restrict writeonly image2D t_out_moments;
+layout(binding = 7, r8ui) uniform restrict uimage2D t_out_history_length;
 
-layout(binding = 8) uniform isampler2D tex_curr_visibility;
-layout(binding = 9) uniform isampler2D tex_prev_visibility;
+layout(binding = 8) uniform sampler2D t_curr_depth;
+layout(binding = 9) uniform sampler2D t_prev_depth;
 
-layout(binding = 10) uniform sampler2D tex_curr_sample;
-layout(binding = 11) uniform sampler2D tex_prev_sample;
+layout(binding = 10) uniform sampler2D t_curr_grad;
 
-layout(binding = 12) uniform sampler2D tex_curr_hist_color;
-// layout(binding = 13) uniform sampler2D tex_prev_hist_color;
-layout(binding = 14) uniform sampler2D tex_curr_hist_moments;
-layout(binding = 15) uniform sampler2D tex_prev_hist_moments;
-
-// layout(binding = 16) uniform sampler2D tex_gradient_atrous_ping;
-// layout(binding = 17) uniform sampler2D tex_gradient_atrous_pong;
-
-layout(binding = 18, rgba32f) uniform restrict image2D img_color_atrous_ping;
-layout(binding = 19) uniform sampler2D tex_grad_atrous_pong;
-
-layout(binding = 20, rgba32f) uniform restrict image2D img_curr_hist_moments;
-layout(binding = 21, rgba32f) uniform restrict image2D img_atrous_ping_moments;
+layout(binding = 11) uniform restrict writeonly image2D debug;
 
 layout(binding = 0, std140) uniform Reprojection {
   mat4 view_proj;
@@ -77,9 +62,38 @@ layout(binding = 1, std140) uniform Denoising {
 }
 denoising;
 
-shared vec4 s_normal_lum[SHARED_SIZE][SHARED_SIZE];
-shared float s_depth[SHARED_SIZE][SHARED_SIZE];
-shared float s_depth_width[GROUP_SIZE / GRAD_DWN][GROUP_SIZE / GRAD_DWN];
+#define GRAD_DWN (3)
+#define GROUP_SIZE 15
+#define FILTER_RADIUS 1
+#define SHARED_SIZE (GROUP_SIZE + FILTER_RADIUS * 2)
+
+layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE,
+       local_size_z = 1) in;
+
+float get_view_depth(float depth, mat4 proj) {
+  // Returns linear depth in [near, far]
+  return proj[3][2] / (proj[2][2] + (depth * 2.0 - 1.0));
+}
+
+float depth_weight(float depthPrev, float depthCur, vec3 normalCur,
+                   vec3 viewDir, mat4 proj, float phi) {
+  float linearDepthPrev = get_view_depth(depthPrev, proj);
+
+  float linearDepth = get_view_depth(depthCur, proj);
+
+  float angleFactor = max(0.25, -dot(normalCur, viewDir));
+
+  float diff = abs(linearDepthPrev - linearDepth);
+  return exp(-diff * angleFactor / phi);
+}
+
+float normal_weight(vec3 normalPrev, vec3 normalCur, float phi) {
+  // float d = max(0, dot(normalCur, normalPrev));
+  // return d * d;
+  vec3 dd = normalPrev - normalCur;
+  float d = dot(dd, dd);
+  return exp(-d / phi);
+}
 
 vec3 unproject_uv(float depth, vec2 uv, mat4 invXProj) {
   float z = depth * 2.0 - 1.0; // OpenGL Z convention
@@ -88,198 +102,186 @@ vec3 unproject_uv(float depth, vec2 uv, mat4 invXProj) {
   return world.xyz / world.w;
 }
 
-float luminance(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
+void accumulate(vec3 prev_color, vec3 curr_color, vec2 prev_moments,
+                vec2 curr_moments, ivec2 gid) {
+  uint history_length = min(1 + imageLoad(t_out_history_length, gid).x, 255);
+  imageStore(t_out_history_length, gid, uvec4(history_length));
 
-void preload() {
-  ivec2 groupBase = ivec2(gl_WorkGroupID) * GROUP_SIZE - FILTER_RADIUS;
+  float grad = 0.0; texelFetch(t_curr_grad, gid / 3, 0).r;
 
-  for (uint linear_idx = gl_LocalInvocationIndex;
-       linear_idx < SHARED_SIZE * SHARED_SIZE;
-       linear_idx += GROUP_SIZE * GROUP_SIZE) {
-    // Convert the linear index to 2D index in a SHARED_SIZE x SHARED_SIZE
-    // virtual group
-    float t = (float(linear_idx) + 0.5) / float(SHARED_SIZE);
-    int xx = int(floor(fract(t) * float(SHARED_SIZE)));
-    int yy = int(floor(t));
+  float antilag_alpha = clamp(
+      mix(1.0, denoising.flt_antilag * grad, denoising.flt_temporal), 0, 1);
 
-    // Load
-    ivec2 ipos = groupBase + ivec2(xx, yy);
-    float depth = texelFetch(tex_curr_depth, ipos, 0).x;
-    vec3 normal = texelFetch(tex_curr_normal, ipos, 0).rgb;
-    vec3 color = texelFetch(tex_curr_sample, ipos, 0).rgb;
+  float hist_len = min(float(imageLoad(t_out_history_length, gid).x) *
+                               pow(1.0 - antilag_alpha, 10) +
+                           1.0,
+                       256.0);
 
-    // Store
-    s_normal_lum[yy][xx] = vec4(normal.xyz, luminance(color.rgb));
-    s_depth[yy][xx] = depth;
-  }
+  float alpha_color = max(denoising.flt_min_alpha_color, 1.0 / hist_len);
+  float alpha_moments = max(denoising.flt_min_alpha_moments, 1.0 / hist_len);
+
+  alpha_color = mix(alpha_color, 1.0, antilag_alpha);
+
+  imageStore(debug, gid, vec4(alpha_color));
+
+  vec3 out_color = mix(prev_color, curr_color, alpha_color);
+  vec2 out_moments = mix(prev_moments, curr_moments, alpha_moments);
+
+  imageStore(t_out_history_length, gid, uvec4(hist_len));
+  imageStore(t_out_accumulated, gid, vec4(out_color, 0.0));
+  imageStore(t_out_moments, gid, vec4(out_moments, 0.0, 0.0));
 }
 
-void get_shared_data(ivec2 offset, out float depth, out vec3 normal,
-                     out float lum) {
-  ivec2 addr = ivec2(gl_LocalInvocationID) + ivec2(FILTER_RADIUS) + offset;
+vec3 bilerp(vec3 _00, vec3 _01, vec3 _10, vec3 _11, vec2 weight) {
+  vec3 bottom = mix(_00, _10, weight.x);
+  vec3 top = mix(_01, _11, weight.x);
+  return mix(bottom, top, weight.y);
+}
 
-  vec4 normal_lum = s_normal_lum[addr.y][addr.x];
-  depth = s_depth[addr.y][addr.x];
+vec2 bilerp(vec2 _00, vec2 _01, vec2 _10, vec2 _11, vec2 weight) {
+  vec2 bottom = mix(_00, _10, weight.x);
+  vec2 top = mix(_01, _11, weight.x);
+  return mix(bottom, top, weight.y);
+}
 
-  normal = normal_lum.xyz;
-  lum = normal_lum.w;
+float bilerp(float _00, float _01, float _10, float _11, vec2 weight) {
+  float bottom = mix(_00, _10, weight.x);
+  float top = mix(_01, _11, weight.x);
+  return mix(bottom, top, weight.y);
+}
+
+float luminance(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
+
+bool in_bounds(vec2 coord) {
+  return all(lessThan(coord, uniforms.target_dim)) &&
+         all(greaterThanEqual(coord, ivec2(0)));
 }
 
 void main() {
-  preload();
-  barrier();
+  ivec2 curr_coord = ivec2(gl_GlobalInvocationID.xy);
 
-  ivec2 ipos = ivec2(gl_GlobalInvocationID);
-  vec2 uv = (vec2(ipos) + 0.5) / uniforms.target_dim;
-
-  // Doing the reprojection here
-  // (not using a motion buffer, but rather the prev/curr view_proj)
-  vec2 pos_prev;
-  vec4 motion;
-  {
-    float current_depth = texelFetch(tex_curr_depth, ipos, 0).x;
-    vec3 current_world_position =
-        unproject_uv(current_depth, uv, uniforms.inv_view_proj);
-    vec4 clip_pos_prev =
-        uniforms.prev_view_proj * vec4(current_world_position, 1.0);
-    vec3 ndc_pos_prev = clip_pos_prev.xyz / clip_pos_prev.w;
-    vec3 reprojected_uv = ndc_pos_prev;
-    reprojected_uv.xy = ndc_pos_prev.xy * 0.5 + 0.5;
-    reprojected_uv.z = ndc_pos_prev.z * 0.5 + 0.5;
-
-    motion = texelFetch(tex_curr_motion, ipos, 0);
-    // motion /= motion.w;
-
-    pos_prev = reprojected_uv.xy * uniforms.target_dim - 0.5;
+  if (!in_bounds(curr_coord)) {
+    return;
   }
 
-  float motion_length = length(motion.xy * vec2(1280, 720));
+  vec2 uv = (vec2(curr_coord) + 0.5) / uniforms.target_dim;
 
-  float curr_depth;
-  vec3 curr_normal;
-  float curr_lum;
-  get_shared_data(ivec2(0), curr_depth, curr_normal, curr_lum);
-  vec3 curr_geo_normal = texelFetch(tex_curr_geo_normal, ipos, 0).rgb;
+  // Reproject this pixel
+  float current_depth = texelFetch(t_curr_depth, curr_coord, 0).x;
+  vec3 current_world_position =
+      unproject_uv(current_depth, uv, uniforms.inv_view_proj);
+  vec4 clip_pos_prev =
+      uniforms.prev_view_proj * vec4(current_world_position, 1.0);
+  vec3 ndc_pos_prev = clip_pos_prev.xyz / clip_pos_prev.w;
+  vec3 reprojected_uv = ndc_pos_prev;
+  reprojected_uv.xy = ndc_pos_prev.xy * 0.5 + 0.5;
+  reprojected_uv.z = ndc_pos_prev.z * 0.5 + 0.5;
 
-  bool temporal_sample_valid_diff = false;
-  vec4 temporal_moments_histlen = vec4(0);
-  vec3 temporal_color = vec3(0);
-  float temporal_sum_w_diff = 0.0;
-  {
+  vec3 ray_dir = normalize(current_world_position - uniforms.view_pos.xyz).xyz;
 
-    vec2 pos_ld = floor(pos_prev - vec2(0.5));
-    vec2 subpix = fract(pos_prev - vec2(0.5) - pos_ld);
+  vec3 current_world_normal = texelFetch(t_curr_normal, curr_coord, 0).xyz;
 
-    const ivec2 off[4] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
-    float w[4] = {(1.0 - subpix.x) * (1.0 - subpix.y),
-                  (subpix.x) * (1.0 - subpix.y), (1.0 - subpix.x) * (subpix.y),
-                  (subpix.x) * (subpix.y)};
+  ivec2 bottom_left_pos = ivec2(reprojected_uv.xy * uniforms.target_dim - 0.5);
+  vec3 colors[2][2] =
+      vec3[2][2](vec3[2](vec3(0), vec3(0)), vec3[2](vec3(0), vec3(0)));
+  vec2 moments[2][2] =
+      vec2[2][2](vec2[2](vec2(0), vec2(0)), vec2[2](vec2(0), vec2(0)));
+  float valid[2][2] = float[2][2](float[2](0, 0), float[2](0, 0));
 
-    for (int i = 0; i < 4; i++) {
-      ivec2 p = ivec2(pos_ld) + off[i];
+  int valid_count = 0;
 
-      float prev_depth = texelFetch(tex_prev_depth, p, 0).x;
-      vec3 prev_normal = texelFetch(tex_prev_normal, p, 0).xyz;
-      vec3 prev_geo_normal = texelFetch(tex_prev_geo_normal, p, 0).xyz;
+  for (int y = 0; y <= 1; y++) {
+    for (int x = 0; x <= 1; x++) {
+      ivec2 pos = bottom_left_pos + ivec2(x, y);
 
-      float dist_depth =
-          abs(curr_depth - prev_depth + motion.z) / abs(curr_depth);
-      float dot_normals = dot(curr_normal, prev_normal);
-      float dot_geo_normals = dot(curr_geo_normal, prev_geo_normal);
-
-      if (dist_depth < 0.4 && dot_geo_normals > 0.4) {
-        float w_diff = w[i] * max(dot_normals, 0);
-
-        temporal_color += texelFetch(tex_curr_hist_color, p, 0).rgb * w_diff;
-        temporal_moments_histlen +=
-            texelFetch(tex_prev_hist_moments, p, 0).rgba * w_diff;
-        temporal_sum_w_diff += w_diff;
+      if (!in_bounds(pos)) {
+        continue;
       }
-    }
 
-    if (temporal_sum_w_diff > 1e-6) {
-      float inv_w_diff = 1.0 / temporal_sum_w_diff;
-      temporal_color *= inv_w_diff;
-      temporal_moments_histlen *= inv_w_diff;
-      temporal_sample_valid_diff = true;
+      float depth_prev = texelFetch(t_prev_depth, pos, 0).x;
+      if (depth_weight(depth_prev, current_depth, current_world_normal.xyz,
+                       ray_dir, uniforms.proj,
+                       uniforms.phi_depth) < uniforms.depth_tolerance) {
+        continue;
+      }
+
+      vec3 normal_prev = texelFetch(t_prev_normal, pos, 0).xyz;
+      if (normal_weight(normal_prev, current_world_normal.xyz,
+                        uniforms.phi_normal) < uniforms.normal_tolerance) {
+        continue;
+      }
+
+      valid_count += 1;
+      valid[x][y] = 1.0;
+      colors[x][y] = texelFetch(t_prev_accumulated, pos, 0).xyz;
+      moments[x][y] = texelFetch(t_prev_moments, pos, 0).xy;
     }
   }
 
-  vec2 spatial_moments = vec2(curr_lum, curr_lum * curr_lum);
+  vec2 weight = fract(reprojected_uv.xy * uniforms.target_dim - 0.5);
+  vec3 curr_color = texelFetch(t_curr_indirect, curr_coord, 0).xyz;
+  float lum = luminance(curr_color);
+  vec2 curr_moments = {lum, lum * lum};
 
-  {
-    float spatial_sum_w = 1.0;
+  if (valid_count > 0) {
+    float factor = max(0.01, bilerp(valid[0][0], valid[0][1], valid[1][0],
+                                    valid[1][1], weight));
+    vec3 prev_color =
+        bilerp(colors[0][0], colors[0][1], colors[1][0], colors[1][1], weight) /
+        factor;
+    vec2 prev_moments = bilerp(moments[0][0], moments[0][1], moments[1][0],
+                               moments[1][1], weight) /
+                        factor;
 
-    for (int yy = -FILTER_RADIUS; yy <= FILTER_RADIUS; yy++) {
-      for (int xx = -FILTER_RADIUS; xx <= FILTER_RADIUS; xx++) {
-        if (xx == 0 && yy == 0) {
+    accumulate(prev_color, curr_color, prev_moments, curr_moments, curr_coord);
+  } else {
+    ivec2 center_pos = ivec2(reprojected_uv.xy * uniforms.target_dim);
+    vec3 accum_illuminance = vec3(0.0);
+    vec2 accum_moments = vec2(0.0);
+    float accum_weight = 0.0;
+
+    for (int col = 0; col < k_width; col++) {
+      for (int row = 0; row < k_width; row++) {
+        ivec2 offset = ivec2(row - k_radius, col - k_radius);
+        ivec2 pos = center_pos + offset;
+
+        if (!in_bounds(pos)) {
           continue;
         }
 
-        ivec2 p = ipos + ivec2(xx, yy);
+        float kernel_weight = kernel[row][col];
 
-        float depth;
-        vec3 normal;
-        float lum_p;
-        get_shared_data(ivec2(xx, yy), depth, normal, lum_p);
+        vec3 o_color = texelFetch(t_prev_accumulated, pos, 0).rgb;
+        vec2 o_moments = texelFetch(t_prev_moments, pos, 0).xy;
+        vec3 o_normal = texelFetch(t_prev_normal, pos, 0).xyz;
+        float o_depth = texelFetch(t_prev_depth, pos, 0).x;
 
-        float dist_z = abs(curr_depth - depth) * motion.a;
-        if (dist_z < 2.0) {
-          float w = pow(max(0.0, dot(normal, curr_normal)), 128.0);
+        float phi_depth = offset == ivec2(0.0) ? 1.0 : length(vec2(offset));
+        phi_depth *= uniforms.phi_depth;
 
-          spatial_moments += vec2(lum_p * w, lum_p * lum_p * w);
-          spatial_sum_w += w;
-        }
+        float v_normal_weight = normal_weight(
+            o_normal, current_world_normal.xyz, uniforms.phi_normal);
+        float v_depth_weight =
+            depth_weight(o_depth, current_depth, current_world_normal.xyz,
+                         ray_dir, uniforms.proj, uniforms.phi_depth);
+
+        float weight = v_normal_weight * v_depth_weight;
+        accum_illuminance += o_color * weight * kernel_weight;
+        accum_moments += o_moments * weight * kernel_weight;
+        accum_weight += weight * kernel_weight;
       }
     }
 
-    float inv_w2 = 1.0 / spatial_sum_w;
-    spatial_moments *= inv_w2;
+    if (accum_weight >= uniforms.min_accum_weight) {
+      vec3 prev_color = accum_illuminance / accum_weight;
+      vec2 prev_moments = accum_moments / accum_weight;
+
+      accumulate(prev_color, curr_color, prev_moments, curr_moments,
+                 curr_coord);
+    } else {
+      imageStore(t_out_accumulated, curr_coord, vec4(curr_color, 0.0));
+      imageStore(t_out_moments, curr_coord, vec4(curr_moments, 0.0, 0.0));
+      imageStore(t_out_history_length, curr_coord, uvec4(0));
+    }
   }
-
-  vec3 color_curr = texelFetch(tex_curr_sample, ipos, 0).rgb;
-
-  vec3 out_color;
-  vec4 out_moments_histlen;
-
-  float grad = texelFetch(tex_grad_atrous_pong, ipos / GRAD_DWN, 0).r;
-  grad = clamp(grad, 0.0, 1.1);
-
-  if (temporal_sample_valid_diff) {
-    // Compute the antilag factors based on the gradients
-    float antilag_alpha = clamp(
-        mix(1.0, denoising.flt_antilag * grad, denoising.flt_temporal), 0, 1);
-
-    // Adjust the history length, taking the antilag factors into account
-    float hist_len = min(
-        temporal_moments_histlen.b * pow(1.0 - antilag_alpha, 10) + 1.0, 256.0);
-
-    // Compute the blending weights based on history length, so that the filter
-    // converges faster. I.e. the first frame has weight of 1.0, the second
-    // frame 1/2, third 1/3 and so on.
-    float alpha_color = max(denoising.flt_min_alpha_color, 1.0 / hist_len);
-    float alpha_moments = max(denoising.flt_min_alpha_moments, 1.0 / hist_len);
-
-    // Adjust the blending factors, taking the antilag factors into account
-    // again
-    alpha_color = mix(alpha_color, 1.0, antilag_alpha);
-    alpha_moments = mix(alpha_moments, 1.0, antilag_alpha);
-
-    // Blend!
-    out_color.rgb = mix(temporal_color.rgb, color_curr.rgb, alpha_color);
-
-    out_moments_histlen.rg =
-        mix(temporal_moments_histlen.rg, spatial_moments.rg, alpha_moments);
-    out_moments_histlen.b = hist_len;
-  } else {
-    // red --> invalid
-    out_color.rgb = color_curr;
-    out_moments_histlen = vec4(spatial_moments, 1, 1);
-  }
-
-  // Store the outputs for further processing by the a-trous filter
-  imageStore(img_curr_hist_moments, ipos, out_moments_histlen);
-  // imageStore(img_color_atrous_ping, ipos, motion);
-  imageStore(img_color_atrous_ping, ipos, vec4(out_color, 1.0));
-  imageStore(img_atrous_ping_moments, ipos, vec4(out_moments_histlen.xy, 0, 0));
 }

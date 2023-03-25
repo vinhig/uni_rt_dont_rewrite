@@ -51,9 +51,11 @@ private:
   GLuint atrous_ping_texture;
   GLuint atrous_pong_texture;
 
-  GLuint hist_moments_texture[2];
-  GLuint hist_color_texture[2];
+  GLuint moments_texture[2];
+  GLuint hist_len_texture;
   // GLuint gradient_a_trous_texture[2];
+
+  GLuint debug_texture;
 
   GLuint blue_noise_texture;
 

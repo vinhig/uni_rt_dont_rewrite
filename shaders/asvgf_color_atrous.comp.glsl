@@ -16,8 +16,10 @@ layout(binding = 7) uniform sampler2D tex_prev_depth;
 layout(binding = 8) uniform sampler2D tex_curr_motion;
 layout(binding = 9) uniform sampler2D tex_prev_motion;
 
-layout(binding = 10) uniform sampler2D tex_curr_hist_moments;
-layout(binding = 11) uniform sampler2D tex_prev_hist_moments;
+layout(binding = 10) uniform sampler2D tex_curr_moments;
+layout(binding = 11) uniform sampler2D tex_prev_moments;
+
+layout(binding = 21) uniform usampler2D tex_hist_len;
 
 layout(binding = 12) uniform sampler3D tex_blue_noise;
 
@@ -32,9 +34,6 @@ layout(binding = 18) uniform sampler2D tex_atrous_pong_moments;
 
 layout(binding = 19) uniform sampler2D tex_atrous_ping;
 layout(binding = 20) uniform sampler2D tex_atrous_pong;
-
-layout(binding = 21) uniform sampler2D tex_hist_color;
-layout(binding = 22, rgba32f) uniform restrict image2D img_hist_color;
 
 #define BLUE_NOISE_RES (256)
 #define NUM_BLUE_NOISE_TEX (128)
@@ -72,6 +71,11 @@ layout(binding = 1, std140) uniform Denoising {
 }
 denoising;
 
+float get_view_depth(float depth, mat4 proj) {
+  // Returns linear depth in [near, far]
+  return proj[3][2] / (proj[2][2] + (depth * 2.0 - 1.0));
+}
+
 float luminance(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
 
 const float gaussian_kernel[2][2] = {{1.0 / 4.0, 1.0 / 8.0},
@@ -101,13 +105,13 @@ void filter_image(sampler2D img_color, sampler2D img_moments, out vec3 filtered,
 
   // Fetch features to compute weight for edge-avoiding
   vec3 normal_center = texelFetch(tex_curr_normal, ipos, 0).xyz;
-  float depth_center = texelFetch(tex_curr_depth, ipos, 0).x;
-  float fwidth_depth = texelFetch(tex_curr_depth, ipos, 0).w;
+  float depth_center = get_view_depth(texelFetch(tex_curr_depth, ipos, 0).x, uniforms.proj);
+  float fwidth_depth = texelFetch(tex_curr_motion, ipos, 0).w;
 
   float lum_mean = 0.0;
   float sigma_l = 0.0;
 
-  float hist_len = texelFetch(tex_curr_hist_moments, ipos, 0).b;
+  int hist_len = int(texelFetch(tex_hist_len, ipos, 0).r);
 
   if (denoising.flt_atrous_lum != 0 && hist_len > 1) {
     // Compute luminance variance from the statistical moments: Var(X) = E[X^2]
@@ -170,7 +174,7 @@ void filter_image(sampler2D img_color, sampler2D img_moments, out vec3 filtered,
       float w = 1.0;
 
       vec3 normal = texelFetch(tex_curr_normal, p, 0).xyz;
-      float depth = texelFetch(tex_curr_depth, p, 0).x;
+      float depth = get_view_depth(texelFetch(tex_curr_depth, p, 0).x, uniforms.proj);
 
       float dist_z =
           abs(depth_center - depth) * fwidth_depth * denoising.flt_atrous_depth;
@@ -218,11 +222,11 @@ void main() {
 
   switch (push_iteration) {
   case 0:
-    filter_image(tex_atrous_ping, tex_atrous_ping_moments, filtered,
+    filter_image(tex_atrous_ping, tex_curr_moments, filtered,
                  filtered_moments);
     break;
   case 1:
-    filter_image(tex_hist_color, tex_atrous_pong_moments, filtered,
+    filter_image(tex_atrous_pong, tex_atrous_pong_moments, filtered,
                  filtered_moments);
     break;
   case 2:
@@ -237,7 +241,7 @@ void main() {
 
   switch (push_iteration) {
   case 0:
-    imageStore(img_hist_color, ipos, vec4(filtered, 1.0));
+    imageStore(img_atrous_pong, ipos, vec4(filtered, 1.0));
     imageStore(img_atrous_pong_moments, ipos, vec4(filtered_moments, 0, 0));
     break;
   case 1:
