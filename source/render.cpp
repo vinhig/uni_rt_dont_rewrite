@@ -255,7 +255,7 @@ Render::Render() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glBindTexture(GL_TEXTURE_2D, rng_seed_texture[i]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32I, 1280, 720, 0, GL_RGBA_INTEGER,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, 1280, 720, 0, GL_RGBA_INTEGER,
                  GL_INT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -470,9 +470,9 @@ void Render::SetSceneEmbree(UniRt::Scene *scene) {
     blue_noise_texture_ispc[i].height = h;
     blue_noise_texture_ispc[i].channels = n;
     blue_noise_texture_ispc[i].data =
-        static_cast<uint8_t *>(malloc(sizeof(unsigned char) * w * h * n));
+        static_cast<uint8_t*>(malloc(sizeof(unsigned char) * w * h * n));
 
-    memcpy((void *)blue_noise_texture_ispc[0].data, img_data,
+    memcpy((void*)blue_noise_texture_ispc[0].data, img_data,
            256 * 256 * 4 * sizeof(unsigned char));
 
     stbi_image_free(img_data);
@@ -631,11 +631,13 @@ void Render::DrawGUI() {
 
   ImGui::SliderFloat("Camera.speed", &camera.speed, -3.0f, 3.0f);
 
-  if (ImGui::Button("Reset Camera.speed")) {
+    if (ImGui::Button("Reset Camera.speed")) {
     camera.speed = 0.0;
   }
 
   ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
+
+
 
   if (temporal_accumulation) {
     ImGui::SliderFloat("Repro.phi_depth", &reprojection.phi_depth, 0.01f, 0.8f);
@@ -876,7 +878,7 @@ bool Render::Update() {
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 normal_texture_pixels.data());
 
-  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1 - current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1-current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA_INTEGER, GL_INT,
                 rng_seed_texture_pixels[current_frame % 2].data());
 
@@ -893,7 +895,7 @@ bool Render::Update() {
                img_albedo.data());
 
   glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1 - current_frame % 2]);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32I, 1280, 720, 0, GL_RGBA_INTEGER,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, 1280, 720, 0, GL_RGBA_INTEGER,
                GL_INT, rng_seed_texture_pixels[1 - current_frame % 2].data());
 
   glFinish();

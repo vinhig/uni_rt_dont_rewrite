@@ -40,9 +40,10 @@ layout(binding = 6) uniform isampler2D t_curr_rng_seed;
 layout(binding = 7) uniform isampler2D t_prev_rng_seed;
 
 layout(binding = 8) uniform restrict writeonly image2D t_out_gradient;
-layout(binding = 9, r32i) uniform restrict writeonly iimage2D t_out_rng_seed;
+layout(binding = 9, r32ui) uniform restrict writeonly uimage2D t_out_rng_seed;
 
 shared vec4 reprojected_pixels[GROUP_SIZE_PIXELS][GROUP_SIZE_PIXELS];
+shared uint reprojected_rng[GROUP_SIZE_PIXELS][GROUP_SIZE_PIXELS];
 
 layout(binding = 0, std140) uniform Reprojection {
   mat4 view_proj;
@@ -114,6 +115,22 @@ vec3 unproject_uv(float depth, vec2 uv, mat4 inv_view_proj) {
   return world.xyz / world.w;
 }
 
+uint generate_rng_seed(ivec2 ipos) {
+  int frame_num = int(uniforms.frame_number);
+
+  uint frame_offset = frame_num / NUM_BLUE_NOISE_TEX;
+
+  uint rng_seed = 0;
+  rng_seed |= (uint(ipos.x + frame_offset) % BLUE_NOISE_RES)
+              << RNG_SEED_SHIFT_X;
+  rng_seed |= (uint(ipos.y + (frame_offset << 4)) % BLUE_NOISE_RES)
+              << RNG_SEED_SHIFT_Y;
+  rng_seed |= uint(false) << RNG_SEED_SHIFT_ISODD;
+  rng_seed |= uint(frame_num) << RNG_SEED_SHIFT_FRAME;
+
+  return rng_seed;
+}
+
 void reproject_pixel(ivec2 ipos) {
   // First pass, for all pixel in current frame, match the pixel of the previous
   // frame
@@ -122,6 +139,7 @@ void reproject_pixel(ivec2 ipos) {
 
   // Init
   reprojected_pixels[local_pos.y][local_pos.x] = vec4(0.0);
+  reprojected_rng[local_pos.y][local_pos.x] = generate_rng_seed(ipos);
 
   vec2 uv = (vec2(ipos) + 0.5) / uniforms.target_dim;
 
@@ -149,6 +167,7 @@ void reproject_pixel(ivec2 ipos) {
   float prev_depth = texelFetch(t_prev_depth, prev_coord, 0).x;
   vec3 curr_normal = texelFetch(t_curr_normal, ipos, 0).rgb;
   vec3 prev_normal = texelFetch(t_prev_normal, prev_coord, 0).rgb;
+  uint curr_rng = texelFetch(t_curr_rng_seed, ipos, 0).x;
 
   float depth_error = depth_weight(prev_depth, curr_depth, curr_normal, ray_dir,
                                    uniforms.proj, uniforms.phi_depth);
@@ -163,23 +182,8 @@ void reproject_pixel(ivec2 ipos) {
     reprojected_pixels[local_pos.y][local_pos.x] =
         vec4(ivec2(reprojected_uv.xy * uniforms.target_dim - 0.5),
              prev_luminance, 1.0);
+    reprojected_rng[local_pos.y][local_pos.x] = curr_rng;
   }
-}
-
-uint generate_rng_seed(ivec2 ipos) {
-  int frame_num = int(uniforms.frame_number);
-
-  uint frame_offset = frame_num / NUM_BLUE_NOISE_TEX;
-
-  uint rng_seed = 0;
-  rng_seed |= (uint(ipos.x + frame_offset) % BLUE_NOISE_RES)
-              << RNG_SEED_SHIFT_X;
-  rng_seed |= (uint(ipos.y + (frame_offset << 4)) % BLUE_NOISE_RES)
-              << RNG_SEED_SHIFT_Y;
-  rng_seed |= uint(false) << RNG_SEED_SHIFT_ISODD;
-  rng_seed |= uint(frame_num) << RNG_SEED_SHIFT_FRAME;
-
-  return rng_seed;
 }
 
 void main() {
@@ -188,7 +192,7 @@ void main() {
   // pos_grad is the position inside the 1280/3x720/3 texture yes yes
   ivec2 pos_grad = ipos / (GRAD_DWN);
 
-  imageStore(t_out_rng_seed, ipos, ivec4(generate_rng_seed(ipos)));
+  imageStore(t_out_rng_seed, ipos, uvec4(generate_rng_seed(ipos)));
 
   // Reproject the current pixel
   // Won't save it in the texture as i thought before
@@ -213,6 +217,8 @@ void main() {
   ivec2 found_offset = ivec2(0);
   ivec2 found_pos_prev = ivec2(0);
   vec4 found_prev_lum = vec4(0.0, 0.0, 0.0, 1.0);
+  uint found_prev_rng = uint(0);
+
   // Here is the implementation of Q2RTX which is picking the sample with the
   // highest luminance ...
   for (int offy = 0; offy < GRAD_DWN; offy++) {
@@ -223,8 +229,11 @@ void main() {
 
       vec4 prev_lum = reprojected_pixel;
 
+      uint prev_rng = reprojected_rng[p.y][p.x];
+
       if (prev_lum.z > found_prev_lum.z) {
         found_prev_lum = prev_lum;
+        found_prev_rng = prev_rng;
         found_offset = ivec2(offx, offy);
         found_pos_prev = ivec2(reprojected_pixel.xy);
         found = true;
@@ -238,10 +247,10 @@ void main() {
 
   if (!found) {
     imageStore(t_out_gradient, pos_grad, vec4(0.0));
+    // imageStore(t_out_rng_seed, ipos, uvec4(generate_rng_seed(ipos)));
     return;
   }
 
   imageStore(t_out_gradient, pos_grad, found_prev_lum);
-  imageStore(t_out_rng_seed, ipos + found_offset,
-             ivec4(texelFetch(t_prev_rng_seed, found_pos_prev, 0)));
+  imageStore(t_out_rng_seed, ipos, uvec4(found_prev_rng));
 }
