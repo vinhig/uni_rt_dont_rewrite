@@ -205,8 +205,8 @@ Render::Render() {
 
   camera.angle = 0.0f;
   camera.speed = 0.0f;
-  camera.distance = 5.0f;
-  camera.center = glm::vec3(0.0f, 2.0f, 0.0f);
+  camera.distance = 10.0f;
+  camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   glGenFramebuffers(2, features_fbo);
   glGenTextures(2, position_texture);
