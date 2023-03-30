@@ -162,7 +162,7 @@ void reproject_pixel(ivec2 curr_coord) {
   float dist_depth = abs(curr_depth - prev_depth);
   float dist_normal = dot(prev_norm - curr_norm, prev_norm - curr_norm);
 
-  if (dist_normal < 1.0 && dist_depth < 1.0) {
+  if (dist_normal < 1.0 && dist_depth < 0.5) {
     vec4 stuff = vec4(0);
     stuff.xy = vec2(prev_coord);
     stuff.z = luminance(texelFetch(t_prev_sample, prev_coord, 0).rgb);

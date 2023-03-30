@@ -32,8 +32,8 @@ private:
 
   GLuint denoising_buffer{0};
 
+  GLuint gradient_img_program{0};
   GLuint gradient_reproject_program{0};
-  GLuint gradient_just_program{0};
   GLuint gradient_atrous_program{0};
   GLuint temporal_program{0};
   GLuint color_atrous_program{0};

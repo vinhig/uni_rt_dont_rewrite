@@ -15,22 +15,21 @@ GLuint CompileShader(const char *path, const char *source, GLenum shaderType);
 
 namespace Denoiser {
 ASvgfDenoiser::ASvgfDenoiser() {
-  // {
-  //   std::ifstream comp_file("../shaders/asvgf_gradient_reproject.comp.glsl");
-  //   std::ostringstream comp_ss;
-  //   comp_ss << comp_file.rdbuf();
-  //   std::string comp_source = comp_ss.str();
+  {
+    std::ifstream comp_file("../shaders/asvgf_gradient_img.comp.glsl");
+    std::ostringstream comp_ss;
+    comp_ss << comp_file.rdbuf();
+    std::string comp_source = comp_ss.str();
 
-  //   GLuint comp_shader =
-  //       CompileShader("../shader/asvgf_gradient_reproject.comp.glsl",
-  //                     comp_source.c_str(), GL_COMPUTE_SHADER);
+    GLuint comp_shader = CompileShader("../shader/asvgf_gradient_img.comp.glsl",
+                                       comp_source.c_str(), GL_COMPUTE_SHADER);
 
-  //   gradient_reproject_program = glCreateProgram();
-  //   glAttachShader(gradient_reproject_program, comp_shader);
-  //   glLinkProgram(gradient_reproject_program);
+    gradient_img_program = glCreateProgram();
+    glAttachShader(gradient_img_program, comp_shader);
+    glLinkProgram(gradient_img_program);
 
-  //   glDeleteShader(comp_shader);
-  // }
+    glDeleteShader(comp_shader);
+  }
   {
     std::ifstream comp_file("../shaders/asvgf_gradient_reprojection.comp.glsl");
     std::ostringstream comp_ss;
@@ -41,9 +40,9 @@ ASvgfDenoiser::ASvgfDenoiser() {
         CompileShader("../shader/asvgf_just_gradient.comp.glsl",
                       comp_source.c_str(), GL_COMPUTE_SHADER);
 
-    gradient_just_program = glCreateProgram();
-    glAttachShader(gradient_just_program, comp_shader);
-    glLinkProgram(gradient_just_program);
+    gradient_reproject_program = glCreateProgram();
+    glAttachShader(gradient_reproject_program, comp_shader);
+    glLinkProgram(gradient_reproject_program);
 
     glDeleteShader(comp_shader);
   }
@@ -261,7 +260,7 @@ ASvgfDenoiser::~ASvgfDenoiser() {}
 void ASvgfDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
   {
     glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "ASVGF JUST GRADIENT");
-    glUseProgram(gradient_just_program);
+    glUseProgram(gradient_reproject_program);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,
@@ -303,60 +302,27 @@ void ASvgfDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
 }
 
 GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
-  // Gradient reprojection
-  // {
-  //   glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1,
-  //                    "ASVGF GRADIENT REPROJECTION");
-  //   glUseProgram(gradient_reproject_program);
-
-  //   glActiveTexture(GL_TEXTURE0);
-  //   glBindTexture(GL_TEXTURE_2D, textures.normal_texture[current_frame % 2]);
-  //   glActiveTexture(GL_TEXTURE1);
-  //   glBindTexture(GL_TEXTURE_2D,
-  //                 textures.normal_texture[1 - current_frame % 2]);
-
-  //   glActiveTexture(GL_TEXTURE2);
-  //   glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
-  //   glActiveTexture(GL_TEXTURE3);
-  //   glBindTexture(GL_TEXTURE_2D, textures.depth_texture[1 - current_frame %
-  //   2]);
-
-  //   glActiveTexture(GL_TEXTURE4);
-  //   glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
-  //   glActiveTexture(GL_TEXTURE5);
-  //   glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[1 - current_frame %
-  //   2]);
-
-  //   glActiveTexture(GL_TEXTURE6);
-  //   glBindTexture(GL_TEXTURE_2D, textures.rng_seed_texture[current_frame %
-  //   2]); glActiveTexture(GL_TEXTURE7); glBindTexture(GL_TEXTURE_2D,
-  //                 textures.rng_seed_texture[1 - current_frame % 2]);
-
-  //   glBindImageTexture(8, gradient_reproject_texture[current_frame % 2], 0,
-  //   0,
-  //                      0, GL_READ_WRITE, GL_RGBA32F);
-
-  //   glBindImageTexture(9, textures.rng_seed_texture[current_frame % 2], 0, 0,
-  //   0,
-  //                      GL_READ_WRITE, GL_RGBA32I);
-
-  //   glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
-
-  //   unsigned group_size_pixels = 24;
-  //   glDispatchCompute((1280 + group_size_pixels - 1) / group_size_pixels,
-  //                     (720 + group_size_pixels - 1) / group_size_pixels, 1);
-
-  //   glMemoryBarrier(GL_ALL_BARRIER_BITS);
-
-  //   // printf("gradient_texture[current_frame % 2] => %d\n",
-  //   //        gradient_texture[current_frame % 2]);
-
-  //   glPopDebugGroup();
-  // }
-
   // Gradient computation
 
-  {}
+  {
+    glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1,
+                     "ASVGF GRADIENT COMPUTATION");
+
+    glUseProgram(gradient_img_program);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[1 - current_frame % 2]);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D,
+                  reprojected_luminance_texture[current_frame % 2]);
+
+    glBindImageTexture(2, gradient_ping_texture, 0, 0, 0, GL_READ_WRITE,
+                       GL_RGBA32F);
+
+    glDispatchCompute((1280 / 3 + 16 - 1) / 16, (720 / 3 + 16 - 1) / 16, 1);
+
+    glPopDebugGroup();
+  }
 
   return reprojected_luminance_texture[current_frame % 2];
 
