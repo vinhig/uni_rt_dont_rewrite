@@ -15,24 +15,24 @@ GLuint CompileShader(const char *path, const char *source, GLenum shaderType);
 
 namespace Denoiser {
 ASvgfDenoiser::ASvgfDenoiser() {
+  // {
+  //   std::ifstream comp_file("../shaders/asvgf_gradient_reproject.comp.glsl");
+  //   std::ostringstream comp_ss;
+  //   comp_ss << comp_file.rdbuf();
+  //   std::string comp_source = comp_ss.str();
+
+  //   GLuint comp_shader =
+  //       CompileShader("../shader/asvgf_gradient_reproject.comp.glsl",
+  //                     comp_source.c_str(), GL_COMPUTE_SHADER);
+
+  //   gradient_reproject_program = glCreateProgram();
+  //   glAttachShader(gradient_reproject_program, comp_shader);
+  //   glLinkProgram(gradient_reproject_program);
+
+  //   glDeleteShader(comp_shader);
+  // }
   {
-    std::ifstream comp_file("../shaders/asvgf_gradient_reproject.comp.glsl");
-    std::ostringstream comp_ss;
-    comp_ss << comp_file.rdbuf();
-    std::string comp_source = comp_ss.str();
-
-    GLuint comp_shader =
-        CompileShader("../shader/asvgf_gradient_reproject.comp.glsl",
-                      comp_source.c_str(), GL_COMPUTE_SHADER);
-
-    gradient_reproject_program = glCreateProgram();
-    glAttachShader(gradient_reproject_program, comp_shader);
-    glLinkProgram(gradient_reproject_program);
-
-    glDeleteShader(comp_shader);
-  }
-  {
-    std::ifstream comp_file("../shaders/asvgf_just_gradient.comp.glsl");
+    std::ifstream comp_file("../shaders/asvgf_gradient_reprojection.comp.glsl");
     std::ostringstream comp_ss;
     comp_ss << comp_file.rdbuf();
     std::string comp_source = comp_ss.str();
@@ -264,7 +264,8 @@ void ASvgfDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
     glUseProgram(gradient_just_program);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textures.geo_normal_texture[current_frame % 2]);
+    glBindTexture(GL_TEXTURE_2D,
+                  textures.geo_normal_texture[current_frame % 2]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D,
                   textures.geo_normal_texture[1 - current_frame % 2]);
@@ -275,33 +276,18 @@ void ASvgfDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
     glBindTexture(GL_TEXTURE_2D, textures.depth_texture[1 - current_frame % 2]);
 
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D,
-                  textures.position_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[1 - current_frame % 2]);
 
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D,
-                  reprojected_luminance_texture[1 - current_frame % 2]);
-
-    glActiveTexture(GL_TEXTURE9);
+    glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, textures.rng_seed_texture[current_frame % 2]);
-    glActiveTexture(GL_TEXTURE10);
+    glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D,
                   textures.rng_seed_texture[1 - current_frame % 2]);
 
-    glBindImageTexture(11, gradient_ping_texture, 0, 0, 0, GL_READ_WRITE,
-                       GL_RGBA32F);
+    glBindImageTexture(7, textures.rng_seed_texture[current_frame % 2], 0, 0, 0,
+                       GL_READ_WRITE, GL_RGBA32I);
 
-    glBindImageTexture(12, textures.rng_seed_texture[current_frame % 2], 0, 0,
-                       0, GL_READ_WRITE, GL_RGBA32I);
-
-    glBindImageTexture(13, reprojected_luminance_texture[current_frame % 2], 0,
+    glBindImageTexture(8, reprojected_luminance_texture[current_frame % 2], 0,
                        0, 0, GL_READ_WRITE, GL_RGBA32F);
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
@@ -372,7 +358,7 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
   {}
 
-  return gradient_ping_texture;
+  return reprojected_luminance_texture[current_frame % 2];
 
   // Gradient à-trous
   {

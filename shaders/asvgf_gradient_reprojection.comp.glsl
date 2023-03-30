@@ -39,9 +39,8 @@ layout(binding = 4) uniform sampler2D t_prev_sample;
 layout(binding = 5) uniform isampler2D t_curr_rng_seed;
 layout(binding = 6) uniform isampler2D t_prev_rng_seed;
 
-layout(binding = 7) uniform restrict writeonly image2D t_out_gradient;
-layout(binding = 8, r32ui) uniform restrict writeonly uimage2D t_out_rng_seed;
-layout(binding = 9) uniform restrict writeonly image2D t_out_reprojected;
+layout(binding = 7, r32ui) uniform restrict writeonly uimage2D t_out_rng_seed;
+layout(binding = 8) uniform restrict writeonly image2D t_out_reprojected;
 
 shared vec4 reprojected_lum[GROUP_SIZE_PIXELS][GROUP_SIZE_PIXELS];
 
@@ -181,7 +180,7 @@ void main() {
   // ipos is the position inside the 1280x720 texture yes yes
   ivec2 curr_coord = ivec2(gl_GlobalInvocationID);
 
-  imageStore(t_out_gradient, curr_coord / 3, vec4(0.0));
+  imageStore(t_out_reprojected, curr_coord / 3, vec4(0.0));
   imageStore(t_out_rng_seed, curr_coord, uvec4(generate_rng_seed(curr_coord)));
 
   reproject_pixel(curr_coord);
@@ -221,11 +220,11 @@ void main() {
   }
 
   if (!found) {
-    imageStore(t_out_gradient, pos_grad, vec4(0.0));
+    imageStore(t_out_reprojected, pos_grad, vec4(0.0));
     return;
   }
 
-  imageStore(t_out_gradient, pos_grad, vec4(found_prev_lum));
+  imageStore(t_out_reprojected, pos_grad, vec4(found_prev_lum));
   imageStore(t_out_rng_seed, curr_coord + found_offset,
              uvec4(texelFetch(t_prev_rng_seed, found_pos_prev, 0)));
 }
