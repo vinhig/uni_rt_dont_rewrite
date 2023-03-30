@@ -82,6 +82,8 @@ private:
 
   unsigned current_frame{0};
 
+  Denoiser::BunchOfTexture bunch_of_textures;
+
   GLuint features_fbo[2];
   GLuint position_texture[2];
   GLuint normal_texture[2];

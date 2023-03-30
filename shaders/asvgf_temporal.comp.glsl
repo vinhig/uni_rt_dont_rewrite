@@ -107,7 +107,7 @@ void accumulate(vec3 prev_color, vec3 curr_color, vec2 prev_moments,
   uint history_length = min(1 + imageLoad(t_out_history_length, gid).x, 255);
   imageStore(t_out_history_length, gid, uvec4(history_length));
 
-  float grad = 0.0; texelFetch(t_curr_grad, gid / 3, 0).r;
+  float grad = texelFetch(t_curr_grad, gid / 3, 0).r;
 
   float antilag_alpha = clamp(
       mix(1.0, denoising.flt_antilag * grad, denoising.flt_temporal), 0, 1);

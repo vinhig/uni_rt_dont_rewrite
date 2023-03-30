@@ -15,6 +15,8 @@ public:
 
   bool NeedPostTemporalAccumulation() override { return false; }
 
+  void ReprojectSeed(BunchOfTexture &textures, int current_frame);
+
 private:
   struct DenoisingCB {
     float flt_antilag{1.0f};
@@ -31,7 +33,7 @@ private:
   GLuint denoising_buffer{0};
 
   GLuint gradient_reproject_program{0};
-  GLuint gradient_image_program{0};
+  GLuint gradient_just_program{0};
   GLuint gradient_atrous_program{0};
   GLuint temporal_program{0};
   GLuint color_atrous_program{0};
@@ -39,7 +41,7 @@ private:
   GLuint uniform_grad_push_iteration_location{0};
   GLuint uniform_color_push_iteration_location{0};
 
-  GLuint gradient_reproject_texture[2];
+  // GLuint gradient_reproject_texture[2];
   GLuint gradient_texture[2];
 
   GLuint gradient_ping_texture;
@@ -50,6 +52,8 @@ private:
   GLuint moment_pong_texture;
   GLuint atrous_ping_texture;
   GLuint atrous_pong_texture;
+
+  GLuint reprojected_luminance_texture[2];
 
   GLuint moments_texture[2];
   GLuint hist_len_texture;
