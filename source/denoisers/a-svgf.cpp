@@ -284,7 +284,7 @@ void ASvgfDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
                   textures.rng_seed_texture[1 - current_frame % 2]);
 
     glBindImageTexture(7, textures.rng_seed_texture[current_frame % 2], 0, 0, 0,
-                       GL_READ_WRITE, GL_RGBA32I);
+                       GL_READ_WRITE, GL_RGBA32UI);
 
     glBindImageTexture(8, reprojected_luminance_texture[current_frame % 2], 0,
                        0, 0, GL_READ_WRITE, GL_RGBA32F);
@@ -323,9 +323,6 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
     glPopDebugGroup();
   }
-
-  return reprojected_luminance_texture[current_frame % 2];
-
   // Gradient à-trous
   {
     glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1,
@@ -493,7 +490,7 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glPopDebugGroup();
   }
 
-  return gradient_pong_texture;
+  return atrous_pong_texture;
 }
 } // namespace Denoiser
 } // namespace UniRt

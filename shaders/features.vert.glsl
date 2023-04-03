@@ -46,8 +46,16 @@ void main() {
 
   o_instance_id = instance_id + 1;
 
-  o_motion = uniforms.view_proj * vec4(o_position, 1.0) -
-             uniforms.prev_view_proj * vec4(o_position, 1.0);
+  vec4 p_curr = uniforms.view_proj * transform * vec4(position, 1.0);
+  vec4 p_prev = uniforms.prev_view_proj * transform * vec4(position, 1.0);
+
+  // p_curr.xyz /= p_curr.w;
+  // p_prev.xyz /= p_prev.w;
+
+  // o_motion.xy = (p_curr - p_prev).xy;
+
+  o_motion = uniforms.view_proj * transform * vec4(position, 1.0) -
+             uniforms.prev_view_proj * transform * vec4(position, 1.0);
 
   gl_Position = uniforms.view_proj * transform * vec4(position, 1.0);
 }

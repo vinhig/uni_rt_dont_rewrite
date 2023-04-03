@@ -15,6 +15,8 @@ add_library(imgui imgui/imgui_draw.cpp imgui/imgui_tables.cpp imgui/imgui_widget
 target_include_directories(imgui PUBLIC imgui/)
 target_link_libraries(imgui SDL2::SDL2)
 
+add_subdirectory(source/oidn)
+
 add_executable(uni_rt_dont_rewrite
     source/buffer_view.cpp
     source/file_mapping.cpp
@@ -29,8 +31,8 @@ add_executable(uni_rt_dont_rewrite
     source/embree_utils.cpp
     
     source/denoisers/bmfr.cpp
-    source/denoisers/a-svgf.cpp)
-
+    source/denoisers/a-svgf.cpp
+    source/denoisers/oidn.cpp)
 
 target_include_directories(uni_rt_dont_rewrite PUBLIC imgui/)
 target_include_directories(uni_rt_dont_rewrite PUBLIC source/parallel_hashmap)
@@ -41,6 +43,8 @@ target_link_libraries(uni_rt_dont_rewrite OpenGL)
 target_link_libraries(uni_rt_dont_rewrite imgui)
 target_link_libraries(uni_rt_dont_rewrite glm)
 target_link_libraries(uni_rt_dont_rewrite TBB::tbb)
+
+target_link_libraries(uni_rt_dont_rewrite OpenImageDenoise)
 
 # set(ISPC_COMPILE_DEFNS "-O3;--opt=fast-math;-g")
 set(ISPC_COMPILE_DEFNS "-g")

@@ -30,5 +30,7 @@ public:
   virtual GLuint Denoise(BunchOfTexture &textures, int current_frame) = 0;
 
   virtual bool NeedPostTemporalAccumulation() = 0;
+
+  virtual void ReprojectSeed(BunchOfTexture &textures, int current_frame) = 0;
 };
 } // namespace UniRt::Denoiser

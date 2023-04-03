@@ -16,7 +16,7 @@
 #define BLOCK_PIXELS 1024
 #define LOCAL_SIZE 512
 #define BLOCK_EDGE_LENGTH 32
-#define NOISE_AMOUNT 0.2
+#define NOISE_AMOUNT 0.01
 #define BLOCK_OFFSETS_COUNT 16
 
 #define INBLOCK_ID sub_vector *LOCAL_SIZE + groupThreadId

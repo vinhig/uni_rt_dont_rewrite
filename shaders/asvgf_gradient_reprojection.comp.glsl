@@ -226,5 +226,5 @@ void main() {
 
   imageStore(t_out_reprojected, pos_grad, vec4(found_prev_lum));
   imageStore(t_out_rng_seed, curr_coord + found_offset,
-             uvec4(texelFetch(t_prev_rng_seed, found_pos_prev, 0)));
+             uvec4(generate_rng_seed(curr_coord)));
 }

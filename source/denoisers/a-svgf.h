@@ -15,7 +15,7 @@ public:
 
   bool NeedPostTemporalAccumulation() override { return false; }
 
-  void ReprojectSeed(BunchOfTexture &textures, int current_frame);
+  void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 
 private:
   struct DenoisingCB {

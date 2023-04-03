@@ -7,7 +7,7 @@ namespace UniRt::Denoiser {
 struct NoneDenoiser : Denoiser {
 public:
   NoneDenoiser() { printf("hello from none denoiser\n"); };
-  
+
   ~NoneDenoiser() = default;
 
   bool NeedPreTemporalAccumulation() override { return false; }
@@ -17,5 +17,7 @@ public:
   };
 
   bool NeedPostTemporalAccumulation() override { return false; }
+
+  void ReprojectSeed(BunchOfTexture &textures, int current_frame) override{};
 };
 } // namespace UniRt::Denoiser

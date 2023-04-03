@@ -142,9 +142,6 @@ void filter_image(sampler2D img_color, sampler2D img_moments, out vec3 filtered,
 
   float sum_w = 1.0;
 
-  // Add some jitter to sample positions to hide the a-trous filter aliasing
-  // patterns
-  // TODO!
   ivec2 jitter = ivec2(0.0);
   {
     int texnum = int(uniforms.frame_number);

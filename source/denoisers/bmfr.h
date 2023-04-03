@@ -12,6 +12,7 @@ private:
   GLuint denoised_texture[2];
 
   GLuint bmfr_program;
+  GLuint bmfr_reprojection_program;
 
   GLuint per_frame_buffer;
 
@@ -34,6 +35,8 @@ public:
   GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
 
   bool NeedPostTemporalAccumulation() override { return true; }
+
+  void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 };
 
 } // namespace UniRt::Denoiser

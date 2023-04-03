@@ -23,6 +23,7 @@
 
 #include "denoisers/a-svgf.h"
 #include "denoisers/bmfr.h"
+#include "denoisers/oidn.h"
 #include "denoisers/none.h"
 
 #include "stb_image.h"
@@ -53,7 +54,7 @@ out vec4 color;
 void main(void){ 
 	vec2 uv = vec2(gl_FragCoord.x, gl_FragCoord.y) / vec2(1280, 720);
 
-	color = vec4(texture(denoised, uv, 0).xyz /* texture(albedo, uv, 0).xyz*/, 1.0);
+	color = vec4(texture(denoised, uv, 0).xyz * texture(albedo, uv, 0).xyz, 1.0);
 
   // Apply gamma correction
   // color = pow(color, vec4(1.0/2.2));
@@ -205,7 +206,7 @@ Render::Render() {
 
   camera.angle = 0.0f;
   camera.speed = 0.0f;
-  camera.distance = 10.0f;
+  camera.distance = 1.0f;
   camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   int yo = 0;
@@ -698,7 +699,7 @@ void Render::DrawGUI() {
   static char *denoisers[] = {
       "bmfr",
       "a-svgf",
-      "optix",
+      "oidn",
       "none",
   };
   static int chosen = 1;
@@ -716,6 +717,11 @@ void Render::DrawGUI() {
           case 1: {
             delete current_denoiser;
             current_denoiser = new Denoiser::ASvgfDenoiser();
+            break;
+          }
+          case 2: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::OidnDenoiser();
             break;
           }
           case 3: {
@@ -880,8 +886,7 @@ bool Render::Update() {
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-  static_cast<Denoiser::ASvgfDenoiser *>(current_denoiser)
-      ->ReprojectSeed(bunch_of_textures, current_frame);
+  current_denoiser->ReprojectSeed(bunch_of_textures, current_frame);
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -940,12 +945,11 @@ bool Render::Update() {
   if (current_denoiser->NeedPostTemporalAccumulation()) {
     TemporalAccumulationDenoised();
   } else {
-    // glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0,
-    // 0,
-    //                    0, 0, accumulated_denoised_texture[current_frame % 2],
-    //                    GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
+    glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0, 0,
+                       0, 0, accumulated_denoised_texture[current_frame % 2],
+                       GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
 
-    // glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
   }
 
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -955,7 +959,7 @@ bool Render::Update() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(quad_program);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, denoised_texture[current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, accumulated_denoised_texture[current_frame % 2]);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -1030,12 +1034,8 @@ void Render::TemporalAccumulationNoisy() {
   glActiveTexture(GL_TEXTURE12);
   glBindTexture(GL_TEXTURE_2D, depth_texture[1 - current_frame % 2]);
 
-  // t_curr_visibility
   glActiveTexture(GL_TEXTURE13);
-  glBindTexture(GL_TEXTURE_2D, visibility_texture[current_frame % 2]);
-  // t_prev_visibility
-  glActiveTexture(GL_TEXTURE14);
-  glBindTexture(GL_TEXTURE_2D, visibility_texture[1 - current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, motion_texture[current_frame % 2]);
 
   glBindBufferBase(GL_UNIFORM_BUFFER, 0, reprojection_buffer);
 
@@ -1092,6 +1092,9 @@ void Render::TemporalAccumulationDenoised() {
   // t_prev_depth
   glActiveTexture(GL_TEXTURE12);
   glBindTexture(GL_TEXTURE_2D, depth_texture[1 - current_frame % 2]);
+
+  glActiveTexture(GL_TEXTURE13);
+  glBindTexture(GL_TEXTURE_2D, motion_texture[current_frame % 2]);
 
   glBindBufferBase(GL_UNIFORM_BUFFER, 0, reprojection_buffer);
 

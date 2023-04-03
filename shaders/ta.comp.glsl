@@ -34,8 +34,7 @@ layout(binding = 9, r8ui) uniform restrict uimage2D t_out_history_length;
 layout(binding = 11) uniform sampler2D t_curr_depth;
 layout(binding = 12) uniform sampler2D t_prev_depth;
 
-layout(binding = 13) uniform isampler2D t_curr_visibility;
-layout(binding = 14) uniform isampler2D t_prev_visibility;
+layout(binding = 13) uniform sampler2D t_curr_motion;
 
 layout(binding = 0, std140) uniform Reprojection {
   mat4 view_proj;

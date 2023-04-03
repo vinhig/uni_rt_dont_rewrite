@@ -114,8 +114,8 @@ private:
     float target_dim[2]{1280.0f, 720.0f};
     float alpha_illum{0.05f};
     float alpha_moments{0.05f};
-    float phi_depth{0.39};
-    float phi_normal{0.39f};
+    float phi_depth{0.2};
+    float phi_normal{0.3f};
     float depth_tolerance{0.75};
     float normal_tolerance{0.75};
     float min_accum_weight{0.15};

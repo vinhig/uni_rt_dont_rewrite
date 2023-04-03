@@ -29,6 +29,23 @@ BmfrDenoiser::BmfrDenoiser() {
     glDeleteShader(ta_compute);
   }
 
+  {
+    std::ifstream features_ta_file("../shaders/bmfr_reprojection.comp.glsl");
+    std::ostringstream ta_ss;
+    ta_ss << features_ta_file.rdbuf();
+    std::string features_ta_source = ta_ss.str();
+
+    GLuint ta_compute =
+        CompileShader("../shader/bmfr_reprojection.comp.glsl",
+                      features_ta_source.c_str(), GL_COMPUTE_SHADER);
+
+    bmfr_reprojection_program = glCreateProgram();
+    glAttachShader(bmfr_reprojection_program, ta_compute);
+    glLinkProgram(bmfr_reprojection_program);
+
+    glDeleteShader(ta_compute);
+  }
+
   int width, height;
   width = (1280 + (BLOCK_EDGE_LENGTH - 1)) / BLOCK_EDGE_LENGTH;
   height = (720 + (BLOCK_EDGE_LENGTH - 1)) / BLOCK_EDGE_LENGTH;
@@ -128,5 +145,16 @@ BmfrDenoiser::~BmfrDenoiser() {
   glDeleteTextures(1, &out_fitting_texture);
   glDeleteTextures(2, denoised_texture);
 };
+
+void BmfrDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
+  glUseProgram(bmfr_reprojection_program);
+
+  glBindImageTexture(0, textures.rng_seed_texture[current_frame % 2], 0, 0, 0,
+                     GL_READ_WRITE, GL_RGBA32UI);
+
+  glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
+
+  glDispatchCompute((1280 + 15) / 16, (720 + 15) / 16, 1);
+}
 } // namespace Denoiser
 } // namespace UniRt
