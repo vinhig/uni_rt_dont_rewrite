@@ -357,9 +357,9 @@ export void trace_rays(void *uniform _scene,
             }
         } while (bounce < 3);
 
-        tile->shadow[px_id + 0] = (tile->albedo[px_id + 0] < 0.01) ? 0.0 : (illum.x / tile->albedo[px_id + 0]);
-        tile->shadow[px_id + 1] = (tile->albedo[px_id + 1] < 0.01) ? 0.0 : (illum.y / tile->albedo[px_id + 1]);
-        tile->shadow[px_id + 2] = (tile->albedo[px_id + 2] < 0.01) ? 0.0 : (illum.z / tile->albedo[px_id + 2]);
+        tile->shadow[px_id + 0] = (tile->albedo[px_id + 0] < 0.03) ? 0.0 : (illum.x / tile->albedo[px_id + 0]);
+        tile->shadow[px_id + 1] = (tile->albedo[px_id + 1] < 0.03) ? 0.0 : (illum.y / tile->albedo[px_id + 1]);
+        tile->shadow[px_id + 2] = (tile->albedo[px_id + 2] < 0.03) ? 0.0 : (illum.z / tile->albedo[px_id + 2]);
         
         // tile->shadow[px_id + 0] = (tile->shadow[px_id + 0] > 1.4) ? 1.4 : tile->shadow[px_id + 0];
         // tile->shadow[px_id + 1] = (tile->shadow[px_id + 1] > 1.4) ? 1.4 : tile->shadow[px_id + 1];

@@ -130,6 +130,8 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
                GL_DYNAMIC_DRAW);
   glBindBufferBase(GL_UNIFORM_BUFFER, 7, per_frame_buffer);
 
+  glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
+
   glDispatchCompute(w * h, 1, 1);
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);

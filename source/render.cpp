@@ -22,9 +22,10 @@
 #include "util.h"
 
 #include "denoisers/a-svgf.h"
+#include "denoisers/accumulator.h"
 #include "denoisers/bmfr.h"
-#include "denoisers/oidn.h"
 #include "denoisers/none.h"
+#include "denoisers/oidn.h"
 
 #include "stb_image.h"
 
@@ -204,10 +205,10 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.angle = 0.0f;
+  camera.angle = glm::radians(30.0f);
   camera.speed = 0.0f;
-  camera.distance = 1.0f;
-  camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
+  camera.distance = 24.0f;
+  camera.center = glm::vec3(0.0f, 4.0f, 0.0f);
 
   int yo = 0;
   glGetIntegerv(GL_MAX_LABEL_LENGTH, &yo);
@@ -355,7 +356,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::ASvgfDenoiser();
+  current_denoiser = new Denoiser::AccumulatorDenoiser();
 
   glObjectLabel(GL_TEXTURE, position_texture[0], -1, "position_texture[0]");
   glObjectLabel(GL_TEXTURE, position_texture[1], -1, "position_texture[1]");
@@ -669,6 +670,7 @@ void Render::DrawGUI() {
   ImGui::Begin("My awesome memory thesis", NULL, ImGuiCond_Always);
   ImGui::Text("Platform: %s", SDL_GetPlatform());
   ImGui::Text("Current scene: %s", current_scene_name.c_str());
+  ImGui::Text("Current frame: %d", current_frame);
 
   ImGui::SliderFloat("Camera.far", &camera.far, 10.0f, 320.0f);
   ImGui::SliderFloat("Camera.near", &camera.near, 0.01, 1.0f);
@@ -677,6 +679,39 @@ void Render::DrawGUI() {
 
   if (ImGui::Button("Reset Camera.speed")) {
     camera.speed = 0.0;
+  }
+
+  // a list of options in imgui containing "bmfr", "none", "optix"
+  static char *denoisers[] = {
+      "bmfr", "a-svgf", "oidn", "none", "accum",
+  };
+  static int chosen = 4;
+
+  if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 4) || (current_frame == 15 && chosen != 4)) {
+    float *data = new float[1280 * 720 * 4];
+    glBindTexture(GL_TEXTURE_2D,
+                  accumulated_denoised_texture[current_frame % 2]);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, data);
+
+    float *albedo = new float[1280 * 720 * 4];
+    glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, albedo);
+
+    for (int u = 0; u < 1280 * 720 * 4; u++) {
+      data[u] *= albedo[u];
+    }
+
+    char file_path[256];
+    sprintf(file_path, "screenshot_blob_%d_%s.buff", current_frame,
+            denoisers[chosen]);
+    FILE *f = fopen(file_path, "wb");
+
+    fwrite(data, 1280 * 720 * 4 * sizeof(float), 1, f);
+
+    fclose(f);
+
+    delete data;
+    delete albedo;
   }
 
   ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
@@ -695,17 +730,9 @@ void Render::DrawGUI() {
                        0.01f, 0.9f);
   }
 
-  // a list of options in imgui containing "bmfr", "none", "optix"
-  static char *denoisers[] = {
-      "bmfr",
-      "a-svgf",
-      "oidn",
-      "none",
-  };
-  static int chosen = 1;
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
     {
-      for (auto i = 0; i < 4; i++) {
+      for (auto i = 0; i < 5; i++) {
         if (ImGui::Selectable(denoisers[i], i == chosen)) {
           chosen = i;
           switch (chosen) {
@@ -727,6 +754,11 @@ void Render::DrawGUI() {
           case 3: {
             delete current_denoiser;
             current_denoiser = new Denoiser::NoneDenoiser();
+            break;
+          }
+          case 4: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::AccumulatorDenoiser();
             break;
           }
           default: {

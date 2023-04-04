@@ -32,7 +32,9 @@ add_executable(uni_rt_dont_rewrite
     
     source/denoisers/bmfr.cpp
     source/denoisers/a-svgf.cpp
-    source/denoisers/oidn.cpp)
+    source/denoisers/oidn.cpp
+    source/denoisers/accumulator.cpp
+    )
 
 target_include_directories(uni_rt_dont_rewrite PUBLIC imgui/)
 target_include_directories(uni_rt_dont_rewrite PUBLIC source/parallel_hashmap)

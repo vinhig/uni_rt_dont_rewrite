@@ -220,6 +220,11 @@ void main() {
 
   vec2 weight = fract(reprojected_uv.xy * uniforms.target_dim - 0.5);
   vec3 curr_color = texelFetch(t_curr_indirect, curr_coord, 0).xyz;
+
+  if (luminance(curr_color) > 7.0) {
+    curr_color = normalize(curr_color) * 7.0;
+  }
+
   float lum = luminance(curr_color);
   vec2 curr_moments = {lum, lum * lum};
 

@@ -34,7 +34,7 @@ public:
     float speed{1.0f};
 
     float near{0.1f};
-    float far{100.0f};
+    float far{300.0f};
 
     float distance;
 

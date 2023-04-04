@@ -2490,9 +2490,12 @@ bool LoadImageData(Image *image, const int image_idx, std::string *err,
     if (err) {
       (*err) +=
           "Unknown image format. STB cannot decode image data for image[" +
-          std::to_string(image_idx) + "] name = \"" + image->name + "\".\n";
+          std::to_string(image_idx) + "] name = \"" + image->name + "\". Loading a dummy one instead.\n";
     }
-    return false;
+
+    // HARD FIX, if images couldn't be loaded, just load a stupid one
+    data = stbi_load("/home/vincent/Pictures/skill_issue.png", &w, &h, &comp, req_comp);
+    // return false;
   }
 
   if ((w < 1) || (h < 1)) {

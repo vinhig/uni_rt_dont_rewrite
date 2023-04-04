@@ -3,3 +3,4 @@
 imgui/
 build/
 cmake-*
+*.buff

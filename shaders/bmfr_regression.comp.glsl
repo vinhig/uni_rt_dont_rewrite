@@ -76,11 +76,29 @@ layout(binding = 7, std140) uniform PerFrameCB {
   int frame_number;
   int horizontal_blocks_count;
 }
+bmfr_uniforms;
+
+layout(binding = 0, std140) uniform Reprojection {
+  mat4 view_proj;
+  mat4 inv_view_proj;
+  mat4 prev_view_proj;
+  mat4 proj;
+  vec4 view_pos;
+  vec2 target_dim;
+  float alpha_illum;
+  float alpha_moments;
+  float phi_depth;
+  float phi_normal;
+  float depth_tolerance;
+  float normal_tolerance;
+  float min_accum_weight;
+  uint frame_number;
+}
 uniforms;
 
 // Albedo (texture color), used to demodulate
 // Otherwise textures will be blurred
-layout(binding = 8) uniform sampler2D albedo;
+// layout(binding = 8) uniform sampler2D albedo;
 
 shared float sum_vec[LOCAL_SIZE];
 shared float block_max;
@@ -92,6 +110,11 @@ shared float rmat[FEATURES_COUNT][BUFFER_COUNT];
 shared float dotV;
 shared float gchannel[BLOCK_PIXELS];
 shared float bchannel[BLOCK_PIXELS];
+
+float get_view_depth(float depth, mat4 proj) {
+  // Returns linear depth in [near, far]
+  return proj[3][2] / (proj[2][2] + (depth * 2.0 - 1.0));
+}
 
 int mirror(inout int index, int size) {
   if (index < 0) {
@@ -127,7 +150,7 @@ float add_random(float value, int id, int sub_vector, int feature_buffer,
                      (random(uint(id + sub_vector * LOCAL_SIZE +
                                   feature_buffer * BLOCK_EDGE_LENGTH *
                                       BLOCK_EDGE_LENGTH +
-                                  uniforms.frame_number * BUFFER_COUNT *
+                                  bmfr_uniforms.frame_number * BUFFER_COUNT *
                                       BLOCK_EDGE_LENGTH * BLOCK_EDGE_LENGTH)) -
                       0.5);
 }
@@ -138,14 +161,15 @@ void main() {
 
   for (uint sub_vector = 0; sub_vector < 4; sub_vector++) {
     uint index = (sub_vector * LOCAL_SIZE) + groupThreadId;
-    ivec2 uv = ivec2(int(groupId.x % uint(uniforms.horizontal_blocks_count)),
-                     int(groupId.x / uint(uniforms.horizontal_blocks_count)));
+    ivec2 uv =
+        ivec2(int(groupId.x % uint(bmfr_uniforms.horizontal_blocks_count)),
+              int(groupId.x / uint(bmfr_uniforms.horizontal_blocks_count)));
     uv *= ivec2(BLOCK_EDGE_LENGTH);
     uv += ivec2(int(index % BLOCK_EDGE_LENGTH), int(index / BLOCK_EDGE_LENGTH));
-    uv += BLOCK_OFFSETS[uniforms.frame_number % BLOCK_OFFSETS_COUNT];
+    uv += BLOCK_OFFSETS[bmfr_uniforms.frame_number % BLOCK_OFFSETS_COUNT];
 
     // Avoid going out of screen when fetching sample
-    uv = mirror2(uv, ivec2(uniforms.target_dim));
+    uv = mirror2(uv, ivec2(bmfr_uniforms.target_dim));
 
     // Extract value from feature buffers
     // And write them in tmp_data, apply power if needed
@@ -159,12 +183,12 @@ void main() {
     imageStore(tmp_data, ivec2(uvec2(index, 3 + BLOCK_OFFSET)), vec4(normal.z));
 
     vec4 depth = texelFetch(curr_depth, uv, 0);
-    imageStore(tmp_data, ivec2(uvec2(index, 4 + BLOCK_OFFSET)), vec4(depth.x));
-    imageStore(tmp_data, ivec2(uvec2(index, 5 + BLOCK_OFFSET)), vec4(depth.y));
-    imageStore(tmp_data, ivec2(uvec2(index, 6 + BLOCK_OFFSET)), vec4(depth.z));
+    float view_depth = get_view_depth(depth.x, uniforms.proj);
+    imageStore(tmp_data, ivec2(uvec2(index, 4 + BLOCK_OFFSET)), vec4(view_depth));
+    imageStore(tmp_data, ivec2(uvec2(index, 5 + BLOCK_OFFSET)), vec4(view_depth));
+    imageStore(tmp_data, ivec2(uvec2(index, 6 + BLOCK_OFFSET)), vec4(view_depth));
 
     vec4 position = texelFetch(curr_position, uv, 0);
-
     imageStore(tmp_data, ivec2(uvec2(index, 7 + BLOCK_OFFSET)),
                vec4(position.x * position.x));
     imageStore(tmp_data, ivec2(uvec2(index, 8 + BLOCK_OFFSET)),
@@ -172,16 +196,14 @@ void main() {
     imageStore(tmp_data, ivec2(uvec2(index, 9 + BLOCK_OFFSET)),
                vec4(position.z * position.z));
 
-    // vec4 albedo_value = texelFetch(albedo, uv, 0);
     vec4 noisy = texelFetch(noisy_data, uv, 0);
-
     float storeTemp_10 = noisy.x;
     imageStore(tmp_data, ivec2(uvec2(index, 10 + BLOCK_OFFSET)),
                vec4(storeTemp_10));
-    float storeTemp_11 = noisy.x;
+    float storeTemp_11 = noisy.y;
     imageStore(tmp_data, ivec2(uvec2(index, 11 + BLOCK_OFFSET)),
                vec4(storeTemp_11));
-    float storeTemp_12 = noisy.x;
+    float storeTemp_12 = noisy.z;
     imageStore(tmp_data, ivec2(uvec2(index, 12 + BLOCK_OFFSET)),
                vec4(storeTemp_12));
   }
@@ -452,9 +474,9 @@ void main() {
                                               feature_buffer_3 + BLOCK_OFFSET)))
                   .x;
           if ((col == 0) && (feature_buffer_3 < FEATURES_COUNT)) {
-            tmp_1 =
-                add_random(tmp_1, int(groupThreadId), int(sub_vector_7),
-                           int(feature_buffer_3), int(uniforms.frame_number));
+            tmp_1 = add_random(tmp_1, int(groupThreadId), int(sub_vector_7),
+                               int(feature_buffer_3),
+                               int(bmfr_uniforms.frame_number));
           }
           tmp_data_private_cache[sub_vector_7] = tmp_1;
           tmp_sum_value_1 += (tmp_1 * uVec[index_2]);
@@ -572,13 +594,15 @@ void main() {
   for (uint sub_vector_11 = 0; sub_vector_11 < BLOCK_PIXELS / LOCAL_SIZE;
        sub_vector_11++) {
     uint index_6 = (sub_vector_11 * LOCAL_SIZE) + groupThreadId;
-    ivec2 uv_1 = ivec2(int(groupId.x % uint(uniforms.horizontal_blocks_count)),
-                       int(groupId.x / uint(uniforms.horizontal_blocks_count)));
+    ivec2 uv_1 =
+        ivec2(int(groupId.x % uint(bmfr_uniforms.horizontal_blocks_count)),
+              int(groupId.x / uint(bmfr_uniforms.horizontal_blocks_count)));
     uv_1 *= ivec2(32);
     uv_1 += ivec2(int(index_6 % 32), int(index_6 / 32));
-    uv_1 += BLOCK_OFFSETS[uniforms.frame_number % 16];
-    if ((((uv_1.x < 0) || (uv_1.y < 0)) || (uv_1.x >= uniforms.target_dim.x)) ||
-        (uv_1.y >= uniforms.target_dim.y)) {
+    uv_1 += BLOCK_OFFSETS[bmfr_uniforms.frame_number % 16];
+    if ((((uv_1.x < 0) || (uv_1.y < 0)) ||
+         (uv_1.x >= bmfr_uniforms.target_dim.x)) ||
+        (uv_1.y >= bmfr_uniforms.target_dim.y)) {
       continue;
     }
     vec4 storeTemp_20 =

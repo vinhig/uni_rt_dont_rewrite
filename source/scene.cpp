@@ -116,8 +116,8 @@ void Scene::load_gltf(const std::string &fname) {
       auto lig = model.lights[l_idx];
 
       QuadLight light;
-      light.emission = glm::vec4(lig.intensity) * 0.05f *
-                       glm::vec4(lig.color[0], lig.color[1], lig.color[2], 1.0);
+      light.emission = glm::vec4(lig.intensity) * 0.05f,
+      glm::vec4(lig.color[0], lig.color[1], lig.color[2], 1.0);
       light.normal = glm::vec4(glm::normalize(glm::vec3(0.0f, -1.0, 0.0f)), 0);
       ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
       light.width = 1.f;
@@ -278,14 +278,53 @@ void Scene::load_gltf(const std::string &fname) {
   // Does GLTF have lights in the file? If one is missing we should generate
   // one, otherwise we can load them
   std::cout << "Generating light for GLTF scene\n";
-  QuadLight light;
-  light.emission = glm::vec4(20.f);
-  light.normal = glm::vec4(glm::normalize(glm::vec3(0.5, -0.8, -0.5)), 0);
-  light.position = -6.f * light.normal;
-  ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
-  light.width = 4.f;
-  light.height = 4.f;
-  lights.push_back(light);
+  // {
+  //   QuadLight light;
+  //   light.emission = glm::vec4(20.f);
+  //   light.normal = glm::vec4(glm::normalize(glm::vec3(0, -0.8, 0)), 0);
+  //   light.position = -8.f * light.normal;
+  //   light.position.y *= 2.0f;
+  //   ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
+  //   light.width = 4.f;
+  //   light.height = 4.f;
+  //   lights.push_back(light);
+  // }
+
+  {
+    QuadLight light;
+    light.emission = glm::vec4(80.f);
+    light.normal = glm::vec4(glm::normalize(glm::vec3(0.0, -0.8, 0.0)), 0);
+    light.position = -12.f * light.normal;
+    // light.position.y *= 2.0f;
+    ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
+    light.width = 4.f;
+    light.height = 4.f;
+    lights.push_back(light);
+  }
+
+  {
+    QuadLight light;
+    light.emission = glm::vec4(80.f);
+    light.normal = glm::vec4(glm::normalize(glm::vec3(0.2, -0.8, -0.2)), 0);
+    light.position = -8.f * light.normal;
+    light.position.y *= 1.5f;
+    ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
+    light.width = 4.f;
+    light.height = 4.f;
+    lights.push_back(light);
+  }
+
+  {
+    QuadLight light;
+    light.emission = glm::vec4(80.f);
+    light.normal = glm::vec4(glm::normalize(glm::vec3(-0.5, -0.8, 0.0)), 0);
+    light.position = -12.f * light.normal;
+    light.position.y *= 1.5f;
+    ortho_basis(light.v_x, light.v_y, glm::vec3(light.normal));
+    light.width = 4.f;
+    light.height = 4.f;
+    lights.push_back(light);
+  }
 }
 
 void Scene::validate_materials() {
