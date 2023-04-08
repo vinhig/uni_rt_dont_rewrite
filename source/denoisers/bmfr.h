@@ -3,9 +3,6 @@
 #include "../glad/glad.h"
 #include "denoiser.h"
 
-#define W 8
-#define M 4
-
 namespace UniRt::Denoiser {
 struct BmfrDenoiser : Denoiser {
 private:

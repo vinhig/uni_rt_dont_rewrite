@@ -55,7 +55,7 @@ out vec4 color;
 void main(void){ 
 	vec2 uv = vec2(gl_FragCoord.x, gl_FragCoord.y) / vec2(1280, 720);
 
-	color = vec4(texture(denoised, uv, 0).xyz * texture(albedo, uv, 0).xyz, 1.0);
+	color = vec4(texture(denoised, uv, 0).xyz /** texture(albedo, uv, 0).xyz*/, 1.0);
 
   // Apply gamma correction
   // color = pow(color, vec4(1.0/2.2));

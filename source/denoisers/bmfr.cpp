@@ -6,6 +6,10 @@
 #include <iostream>
 #include <sstream>
 
+#define W 16
+#define M 4
+#define BLOCK_SIZE 32
+
 namespace UniRt {
 
 GLuint CompileShader(const char *path, const char *source, GLenum shaderType);
@@ -161,9 +165,10 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   //              GL_DYNAMIC_DRAW);
   // glBindBufferBase(GL_UNIFORM_BUFFER, 7, per_frame_buffer);
 
-  // glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
+  glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
 
-  glDispatchCompute((1280 + (16 - 1)) / 16, (720 + (16 - 1)) / 16, 1);
+  glDispatchCompute((1280 + (BLOCK_SIZE - 1)) / BLOCK_SIZE,
+                    (720 + (BLOCK_SIZE - 1)) / BLOCK_SIZE, 1);
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -179,50 +184,51 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   // printf("\n");
 
   // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+  /*
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
+    float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
-  float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-
-  printf("T_tilde =>\n");
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 3; j++) {
-      printf("%f ", data[i * (M+3) + j]);
+    printf("T_tilde =>\n");
+    for (int i = 0; i < W; i++) {
+      for (int j = 0; j < M + 3; j++) {
+        printf("%f ", data[i * (M+3) + j]);
+      }
+      printf("\n");
     }
+
     printf("\n");
-  }
 
-  printf("\n");
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
+    data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
-  data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-
-  printf("R_tilde =>\n");
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 3; j++) {
-      printf("%f ", data[i * (M+3) + j]);
+    printf("R_tilde =>\n");
+    for (int i = 0; i < W; i++) {
+      for (int j = 0; j < M + 3; j++) {
+        printf("%f ", data[i * (M+3) + j]);
+      }
+      printf("\n");
     }
+
     printf("\n");
-  }
 
-  printf("\n");
+    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
 
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_3);
-  data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+  float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
   printf("alpha_red =>\n");
-    for (int j = 0; j < M; j++) {
-      printf("%f ", data[j]);
-    }
+  for (int j = 0; j < M; j++) {
+    printf("%f ", data[j]);
+  }
 
   printf("\n");
 
   glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-
+*/
   return denoised_texture[current_frame % 2];
 }
 

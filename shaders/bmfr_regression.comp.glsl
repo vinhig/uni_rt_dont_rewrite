@@ -51,14 +51,14 @@ const ivec2 BLOCK_OFFSETS[BLOCK_OFFSETS_COUNT] =
 #endif
 
 // Feature buffers (from the G-Buffer)
-layout(binding = 0) uniform sampler2D curr_position; // Current world position
-layout(binding = 1) uniform sampler2D curr_normal;   // Current normal
+layout(binding = 0) uniform sampler2D tex_pos;    // Current world position
+layout(binding = 1) uniform sampler2D tex_normal; // Current normal
 layout(binding = 2) uniform sampler2D
     curr_depth; // Current depth (distance from camera to pixel sample)
 
 // Noisy data accumulated by a previous pass
 // Will be demodulated
-layout(binding = 3) uniform sampler2D noisy_data;
+layout(binding = 3) uniform sampler2D tex_noisy;
 
 // Temporary buffers to write
 layout(binding = 4, r32f)
@@ -69,7 +69,7 @@ layout(binding = 5,
        r32f) uniform image2D tmp_data; // Values from QR decomposition
 
 // Destination texture when the denoising is done
-layout(binding = 6, rgba32f) uniform image2D render_texture;
+layout(binding = 6, rgba32f) uniform image2D tex_out;
 
 layout(binding = 7, std140) uniform PerFrameCB {
   vec2 target_dim;
@@ -159,7 +159,7 @@ void main() {
   uvec3 groupId = gl_WorkGroupID;
   uint groupThreadId = gl_LocalInvocationIndex;
 
-  for (uint sub_vector = 0; sub_vector < 4; sub_vector++) {
+  for (uint sub_vector = 0; sub_vector < BLOCK_PIXELS / LOCAL_SIZE; sub_vector++) {
     uint index = (sub_vector * LOCAL_SIZE) + groupThreadId;
     ivec2 uv =
         ivec2(int(groupId.x % uint(bmfr_uniforms.horizontal_blocks_count)),
@@ -177,18 +177,21 @@ void main() {
     imageStore(tmp_data, ivec2(uvec2(index, 0 + (groupId.x * 13))),
                vec4(constant));
 
-    vec4 normal = texelFetch(curr_normal, uv, 0);
+    vec4 normal = texelFetch(tex_normal, uv, 0);
     imageStore(tmp_data, ivec2(uvec2(index, 1 + BLOCK_OFFSET)), vec4(normal.x));
     imageStore(tmp_data, ivec2(uvec2(index, 2 + BLOCK_OFFSET)), vec4(normal.y));
     imageStore(tmp_data, ivec2(uvec2(index, 3 + BLOCK_OFFSET)), vec4(normal.z));
 
     vec4 depth = texelFetch(curr_depth, uv, 0);
     float view_depth = get_view_depth(depth.x, uniforms.proj);
-    imageStore(tmp_data, ivec2(uvec2(index, 4 + BLOCK_OFFSET)), vec4(view_depth));
-    imageStore(tmp_data, ivec2(uvec2(index, 5 + BLOCK_OFFSET)), vec4(view_depth));
-    imageStore(tmp_data, ivec2(uvec2(index, 6 + BLOCK_OFFSET)), vec4(view_depth));
+    imageStore(tmp_data, ivec2(uvec2(index, 4 + BLOCK_OFFSET)),
+               vec4(view_depth));
+    imageStore(tmp_data, ivec2(uvec2(index, 5 + BLOCK_OFFSET)),
+               vec4(view_depth));
+    imageStore(tmp_data, ivec2(uvec2(index, 6 + BLOCK_OFFSET)),
+               vec4(view_depth));
 
-    vec4 position = texelFetch(curr_position, uv, 0);
+    vec4 position = texelFetch(tex_pos, uv, 0);
     imageStore(tmp_data, ivec2(uvec2(index, 7 + BLOCK_OFFSET)),
                vec4(position.x * position.x));
     imageStore(tmp_data, ivec2(uvec2(index, 8 + BLOCK_OFFSET)),
@@ -196,7 +199,7 @@ void main() {
     imageStore(tmp_data, ivec2(uvec2(index, 9 + BLOCK_OFFSET)),
                vec4(position.z * position.z));
 
-    vec4 noisy = texelFetch(noisy_data, uv, 0);
+    vec4 noisy = texelFetch(tex_noisy, uv, 0);
     float storeTemp_10 = noisy.x;
     imageStore(tmp_data, ivec2(uvec2(index, 10 + BLOCK_OFFSET)),
                vec4(storeTemp_10));
@@ -216,7 +219,7 @@ void main() {
         imageLoad(tmp_data, ivec2(INBLOCK_ID, feature_buffer + BLOCK_OFFSET)).x;
     float tmp_min = tmp_max;
 
-    for (sub_vector = 1; sub_vector < 4; sub_vector++) {
+    for (sub_vector = 1; sub_vector < BLOCK_PIXELS / LOCAL_SIZE; sub_vector++) {
       float value =
           imageLoad(tmp_data, ivec2(INBLOCK_ID, feature_buffer + BLOCK_OFFSET))
               .x;
@@ -339,7 +342,7 @@ void main() {
                    vec4(storeTemp_14));
       }
     } else {
-      for (uint sub_vector_3 = 0; sub_vector_3 < 4; sub_vector_3++) {
+      for (uint sub_vector_3 = 0; sub_vector_3 < BLOCK_PIXELS / LOCAL_SIZE; sub_vector_3++) {
         float storeTemp_15 =
             imageLoad(tmp_data,
                       ivec2(uvec2(sub_vector_3 * LOCAL_SIZE + groupThreadId,
@@ -364,7 +367,7 @@ void main() {
   }
   for (uint feature_buffer_1 = FEATURES_COUNT; feature_buffer_1 < BUFFER_COUNT;
        feature_buffer_1++) {
-    for (uint sub_vector_4 = 0; sub_vector_4 < 4; sub_vector_4++) {
+    for (uint sub_vector_4 = 0; sub_vector_4 < BLOCK_PIXELS / LOCAL_SIZE; sub_vector_4++) {
       float storeTemp_17 =
           imageLoad(tmp_data,
                     ivec2(uvec2(sub_vector_4 * LOCAL_SIZE + groupThreadId,
@@ -609,7 +612,7 @@ void main() {
         vec4((uVec[index_6] < 0.0) ? 0.0 : uVec[index_6],
              (gchannel[index_6] < 0.0) ? 0.0 : gchannel[index_6],
              (bchannel[index_6] < 0.0) ? 0.0 : bchannel[index_6],
-             texelFetch(noisy_data, uv_1, 1).w);
-    imageStore(render_texture, uv_1, storeTemp_20);
+             texelFetch(tex_noisy, uv_1, 1).w);
+    imageStore(tex_out, uv_1, storeTemp_20);
   }
 }
