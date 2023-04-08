@@ -1,8 +1,8 @@
 #version 430
 
 #define BLOCK_SIZE 16
-#define W 4
-#define M 2 // 1, POS_X
+#define W 8
+#define M 4 // 1, POS_X, POS_Y, POS_Z
 
 layout(local_size_x = BLOCK_SIZE, local_size_y = BLOCK_SIZE,
        local_size_z = 1) in;
@@ -14,7 +14,7 @@ layout(binding = 3) uniform sampler2D tex_indirect;
 
 layout(binding = 4, rgba32f) uniform writeonly image2D tex_out;
 
-layout(std430, binding = 5) buffer debug_1 { float debug_tilde[W][M + 1]; };
+layout(std430, binding = 5) buffer debug_1 { float debug_tilde[W][M + 3]; };
 
 layout(std430, binding = 6) buffer debug_2 { float debug_h[W][W]; };
 
@@ -94,7 +94,7 @@ void householder_matrix(out float H[W][W], float v[W], int k) {
   sub_mat_w(new_H, utu, k, H);
 }
 
-void householder_step(float t_tilde[W][M + 1], out float H[W][W], int k) {
+void householder_step(float t_tilde[W][M + 3], out float H[W][W], int k) {
   // Compute the reflection of the k column
   float alpha[W];
 
@@ -127,9 +127,9 @@ void householder_step(float t_tilde[W][M + 1], out float H[W][W], int k) {
   }
 }
 
-void mul_mat_H(float H[W][W], float A[W][M + 1], out float R[W][M + 1], int k) {
+void mul_mat_H(float H[W][W], float A[W][M + 3], out float R[W][M + 3]) {
   for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 1; j++) {
+    for (int j = 0; j < M + 3; j++) {
       for (int l = 0; l < W; l++) {
         R[i][j] += H[i][l] * A[l][j];
       }
@@ -137,41 +137,64 @@ void mul_mat_H(float H[W][W], float A[W][M + 1], out float R[W][M + 1], int k) {
   }
 }
 
-void householder_qr(float t_tilde[W][M + 1], out float t_v[W][M + 1]) {
-
+void householder_qr(float t_tilde[W][M + 3], out float t_v[W][M + 3]) {
   float H0[W][W];
-  float A0[W][M + 1];
+  float A0[W][M + 3];
 
   householder_step(t_tilde, H0, 0);
-  mul_mat_H(H0, t_tilde, A0, 0);
+  mul_mat_H(H0, t_tilde, A0);
 
   float H1[W][W];
-  float A1[W][M + 1];
+  float A1[W][M + 3];
 
   householder_step(A0, H1, 1);
-  mul_mat_H(H1, A0, A1, 1);
+  mul_mat_H(H1, A0, A1);
 
   float H2[W][W];
-  float A2[W][M + 1];
+  float A2[W][M + 3];
 
   householder_step(A1, H2, 2);
-  mul_mat_H(H2, A1, A2, 2);
+  mul_mat_H(H2, A1, A2);
+
+  float H3[W][W];
+  float A3[W][M + 3];
+
+  householder_step(A2, H3, 2);
+  mul_mat_H(H3, A2, A3);
 
   if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
     for (int i = 0; i < W; i++) {
       for (int j = 0; j < W; j++) {
-        debug_h[i][j] = A2[i][j];
+        debug_h[i][j] = A3[i][j];
       }
     }
   }
 
-  // if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
-  //   for (int i = 0; i < W; i++) {
-  //     for (int j = 0; j < W; j++) {
-  //       debug_h[i][j] = H1[i][j];
-  //     }
-  //   }
-  // }
+  return;
+
+  float H4[W][W];
+  float A4[W][M + 3];
+
+  householder_step(A3, H4, 2);
+  mul_mat_H(H4, A3, A4);
+
+  float H5[W][W];
+  float A5[W][M + 3];
+
+  householder_step(A4, H5, 2);
+  mul_mat_H(H5, A4, A5);
+
+  float H6[W][W];
+  float A6[W][M + 3];
+
+  householder_step(A5, H6, 2);
+  mul_mat_H(H6, A5, A6);
+
+  float H7[W][W];
+  float A7[W][M + 3];
+
+  householder_step(A6, H7, 2);
+  mul_mat_H(H7, A6, A7);
 }
 
 void main() {
@@ -186,7 +209,7 @@ void main() {
   // coord *= ivec2(BLOCK_SIZE, BLOCK_SIZE);
 
   // Build t_tilde
-  float t_tilde[W][M + 1];
+  float t_tilde[W][M + 3];
 
   for (int i = 0; i < W; i++) {
     t_tilde[i][0] = 1.0;
@@ -196,21 +219,21 @@ void main() {
     ivec2 local_coord = coord + ivec2(i, i);
 
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
-    // t_tilde[i][1] = pos.x;
+    t_tilde[i][1] = pos.x;
     t_tilde[i][2] = pos.y + W - float(i);
-    // t_tilde[i][3] = pos.z;
+    t_tilde[i][3] = pos.z;
 
     // t_tilde[i][1] = float(i);
 
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     // t_tilde[i][4] = norm.x;
     // t_tilde[i][5] = norm.y;
-    t_tilde[i][1] = norm.z;
+    // t_tilde[i][1] = norm.z;
 
-    // vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    // t_tilde[i][7] = noisy.x;
-    // t_tilde[i][8] = noisy.y;
-    // t_tilde[i][9] = noisy.z;
+    vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
+    t_tilde[i][4] = noisy.x;
+    t_tilde[i][5] = noisy.y;
+    t_tilde[i][6] = noisy.z;
   }
 
   // Compute QR factorization for t_tilde
@@ -218,13 +241,13 @@ void main() {
   // Debug output for a single matrix
   if (coord.x == 640 && coord.y == 360) {
     for (int w = 0; w < W; w++) {
-      for (int m = 0; m < M + 1; m++) {
+      for (int m = 0; m < M + 3; m++) {
         debug_tilde[w][m] = t_tilde[w][m];
       }
     }
   }
 
-  float t_v[W][M + 1];
+  float t_v[W][M + 3];
   householder_qr(t_tilde, t_v);
 
   // Output results
