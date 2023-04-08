@@ -2,54 +2,54 @@
 
 #define BLOCK_SIZE 32
 #define W 16
-#define M 4
-// 1, POS_X², POS_Y², POS_Z²
+#define M 7
+// 1, POS_X², POS_Y², POS_Z², NORM_X², NORM_Y², NORM_Z²
 #define NOISE_AMOUNT 0.1
 
-#define OFFSETS_COUNT 16
+#define OFFSETS_COUNT 32
 const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
+    vec2(0.5004785746285491, 0.7249900791844404),
+    vec2(0.6616787922684506, 0.8431932401454286),
+    vec2(0.013792616530536095, 0.07606840902247503),
+    vec2(0.5506476459339343, 0.5526037993849915),
+    vec2(0.19107659212621841, 0.6354946478787757),
+    vec2(0.08635995805355967, 0.2472202396255624),
+    vec2(0.1252250440433068, 0.08609885530246719),
+    vec2(0.5904742704843103, 0.030490538789994526),
+    vec2(0.10092023462217092, 0.28999319035930815),
+    vec2(0.5111282665879786, 0.5210547623000872),
+    vec2(0.41340214843009226, 0.4053946747614482),
+    vec2(0.7918845643409962, 0.5976228115068767),
+    vec2(0.581450087162451, 0.4589538001737091),
+    vec2(0.842207304152363, 0.2930246707112014),
+    vec2(0.8484321745810262, 0.6802420254928683),
+    vec2(0.05634620713888261, 0.33998908042767395),
+    vec2(0.4127325637806537, 0.03475081029893923),
+    vec2(0.7351358812117753, 0.4609277171243483),
+    vec2(0.7530362313643808, 0.07159967465392558),
+    vec2(0.2537496924765742, 0.4081893890964827),
+    vec2(0.8242599497999632, 0.3479496401290726),
+    vec2(0.02472941535834594, 0.08531173028951677),
+    vec2(0.14550073150566112, 0.00019923791476850194),
+    vec2(0.8701282290178975, 0.10619976176689505),
+    vec2(0.8301964700168487, 0.891685097229575),
+    vec2(0.0965915286907838, 0.14401801210186915),
+    vec2(0.739085379430238, 0.40751300048167005),
+    vec2(0.8189104667888195, 0.07553790493802559),
+    vec2(0.0819085928456772, 0.47462590600346855),
+    vec2(0.27586799506009396, 0.23212979598942174),
+    vec2(0.502863992002033, 0.07109038503647092),
+    vec2(0.8964918160764741, 0.8827850755057025),
     /*
-      vec2(0.5004785746285491, 0.7249900791844404),
-      vec2(0.6616787922684506, 0.8431932401454286),
-      vec2(0.013792616530536095, 0.07606840902247503),
-      vec2(0.5506476459339343, 0.5526037993849915),
-      vec2(0.19107659212621841, 0.6354946478787757),
-      vec2(0.08635995805355967, 0.2472202396255624),
-      vec2(0.1252250440433068, 0.08609885530246719),
-      vec2(0.5904742704843103, 0.030490538789994526),
-      vec2(0.10092023462217092, 0.28999319035930815),
-      vec2(0.5111282665879786, 0.5210547623000872),
-      vec2(0.41340214843009226, 0.4053946747614482),
-      vec2(0.7918845643409962, 0.5976228115068767),
-      vec2(0.581450087162451, 0.4589538001737091),
-      vec2(0.842207304152363, 0.2930246707112014),
-      vec2(0.8484321745810262, 0.6802420254928683),
-      vec2(0.05634620713888261, 0.33998908042767395),
-      vec2(0.4127325637806537, 0.03475081029893923),
-      vec2(0.7351358812117753, 0.4609277171243483),
-      vec2(0.7530362313643808, 0.07159967465392558),
-      vec2(0.2537496924765742, 0.4081893890964827),
-      vec2(0.8242599497999632, 0.3479496401290726),
-      vec2(0.02472941535834594, 0.08531173028951677),
-      vec2(0.14550073150566112, 0.00019923791476850194),
-      vec2(0.8701282290178975, 0.10619976176689505),
-      vec2(0.8301964700168487, 0.891685097229575),
-      vec2(0.0965915286907838, 0.14401801210186915),
-      vec2(0.739085379430238, 0.40751300048167005),
-      vec2(0.8189104667888195, 0.07553790493802559),
-      vec2(0.0819085928456772, 0.47462590600346855),
-      vec2(0.27586799506009396, 0.23212979598942174),
-      vec2(0.502863992002033, 0.07109038503647092),
-      vec2(0.8964918160764741, 0.8827850755057025),
-      */
-    vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
-    vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
-    vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
-    vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
-    vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
-    vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
-    vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
-    vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,
+  vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
+  vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
+  vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
+  vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
+  vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
+  vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
+  vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
+  vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,
+  */
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -325,57 +325,32 @@ void main() {
         coord +
         ivec2(RELATIVE_OFFSETS[(uniforms.current_frame + i) % OFFSETS_COUNT] *
               vec2(BLOCK_SIZE));
-
+    vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
     T_tilde[i][1] = pos.x * pos.x;
     T_tilde[i][2] = pos.y * pos.y;
     T_tilde[i][3] = pos.z * pos.z;
+    T_tilde[i][4] = norm.x * norm.x;
+    T_tilde[i][5] = norm.y * norm.y;
+    T_tilde[i][6] = norm.z * norm.z;
 
     T_tilde[i][1] += add_random(local_coord.x, local_coord.y, i + 1);
     T_tilde[i][2] += add_random(local_coord.x, local_coord.y, i + 2);
     T_tilde[i][3] += add_random(local_coord.x, local_coord.y, i + 3);
 
-    // T_tilde[i][1] = float(i);
-
-    // vec4 norm = texelFetch(tex_normal, local_coord, 0);
-    // T_tilde[i][4] = norm.x + add_random(local_coord.x, local_coord.y, i + 4);
-    // T_tilde[i][5] = norm.y + add_random(local_coord.x, local_coord.y, i + 5);
-    // T_tilde[i][6] = norm.z + add_random(local_coord.x, local_coord.y, i + 6);
-
-    // T_tilde[i][7] =
-    //     pos.x * pos.x + add_random(local_coord.x, local_coord.y, i + 8);
-    // T_tilde[i][8] =
-    //     pos.y * pos.y + add_random(local_coord.x, local_coord.y, i + 8);
-    // T_tilde[i][9] =
-    //     pos.z * pos.z + add_random(local_coord.x, local_coord.y, i + 9);
+    T_tilde[i][4] += add_random(local_coord.x, local_coord.y, i + 4);
+    T_tilde[i][5] += add_random(local_coord.x, local_coord.y, i + 5);
+    T_tilde[i][6] += add_random(local_coord.x, local_coord.y, i + 6);
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    T_tilde[i][4] = noisy.x;
-    T_tilde[i][5] = noisy.y;
-    T_tilde[i][6] = noisy.z;
+    T_tilde[i][7] = noisy.x;
+    T_tilde[i][8] = noisy.y;
+    T_tilde[i][9] = noisy.z;
   }
 
   // Compute QR factorization for T_tilde
-
-  // Debug output for a single matrix
-  // if (coord.x == 640 && coord.y == 360) {
-  //   for (int w = 0; w < W; w++) {
-  //     for (int m = 0; m < M + 3; m++) {
-  //       debug_tilde[w][m] = T_tilde[w][m];
-  //     }
-  //   }
-  // }
-
   float R_tilde[W][M + 3];
   householder_qr(T_tilde, R_tilde);
-
-  // if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
-  //   for (int i = 0; i < W; i++) {
-  //     for (int j = 0; j < M + 3; j++) {
-  //       debug_h[i][j] = R_tilde[i][j];
-  //     }
-  //   }
-  // }
 
   // Extract R and a r for each channel
   float R[M][M];
@@ -390,22 +365,16 @@ void main() {
   }
 
   for (int j = 0; j < M; j++) {
-    r_red[j] = R_tilde[j][4];
+    r_red[j] = R_tilde[j][M + 3 - 3];
   }
 
   for (int j = 0; j < M; j++) {
-    r_green[j] = R_tilde[j][5];
+    r_green[j] = R_tilde[j][M + 3 - 2];
   }
 
   for (int j = 0; j < M; j++) {
-    r_blue[j] = R_tilde[j][6];
+    r_blue[j] = R_tilde[j][M + 3 - 1];
   }
-
-  // if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
-  //   for (int i = 0; i < M; i++) {
-  //     debug_alpha[i] = r_blue[i];
-  //   }
-  // }
 
   // Resolve Ra=r
   float alpha_red[M];
@@ -426,19 +395,14 @@ void main() {
       features[1] = pos.x * pos.x;
       features[2] = pos.y * pos.y;
       features[3] = pos.z * pos.z;
-      // features[4] = norm.x;
-      // features[5] = norm.y;
-      // features[6] = norm.z;
-      // features[7] = pos.x * pos.x;
-      // features[8] = pos.y * pos.y;
-      // features[9] = pos.z * pos.z;
+      features[4] = norm.x * norm.x;
+      features[5] = norm.y * norm.y;
+      features[6] = norm.z * norm.z;
       float red = dot_m(alpha_red, features);
       float green = dot_m(alpha_green, features);
       float blue = dot_m(alpha_blue, features);
-      // imageStore(tex_out, coord + ivec2(offx, offy),
-      //            vec4(abs(alpha_red[0]), abs(alpha_red[1]), abs(alpha_red[2]),
-      //                 abs(alpha_red[3])));
-      imageStore(tex_out, coord + ivec2(offx, offy), vec4(red, green, blue, 1.0));
+      imageStore(tex_out, coord + ivec2(offx, offy),
+                 vec4(alpha_red[0], alpha_red[1], alpha_red[2], alpha_red[3]));
     }
   }
 }

@@ -16,8 +16,6 @@ private:
 
   GLuint per_frame_buffer;
 
-  const int BLOCK_EDGE_LENGTH = 32;
-
   struct PerFrameCB {
     float target_dim[2]{1280, 720};
     int frame_number{00};
