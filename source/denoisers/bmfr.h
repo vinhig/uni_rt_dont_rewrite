@@ -3,6 +3,9 @@
 #include "../glad/glad.h"
 #include "denoiser.h"
 
+#define W 8
+#define M 4
+
 namespace UniRt::Denoiser {
 struct BmfrDenoiser : Denoiser {
 private:
@@ -30,11 +33,16 @@ public:
   BmfrDenoiser();
   ~BmfrDenoiser();
 
-  bool NeedPreTemporalAccumulation() override { return true; }
+  GLuint debug_1;
+  GLuint debug_2;
+  GLuint debug_3;
+  GLuint debug_4;
+
+  bool NeedPreTemporalAccumulation() override { return false; }
 
   GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
 
-  bool NeedPostTemporalAccumulation() override { return true; }
+  bool NeedPostTemporalAccumulation() override { return false; }
 
   void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 };

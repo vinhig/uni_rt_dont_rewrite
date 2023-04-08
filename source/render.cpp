@@ -356,7 +356,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::AccumulatorDenoiser();
+  current_denoiser = new Denoiser::BmfrDenoiser();
 
   glObjectLabel(GL_TEXTURE, position_texture[0], -1, "position_texture[0]");
   glObjectLabel(GL_TEXTURE, position_texture[1], -1, "position_texture[1]");
@@ -685,7 +685,7 @@ void Render::DrawGUI() {
   static char *denoisers[] = {
       "bmfr", "a-svgf", "oidn", "none", "accum",
   };
-  static int chosen = 4;
+  static int chosen = 0;
 
   if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 4) || (current_frame == 15 && chosen != 4)) {
     float *data = new float[1280 * 720 * 4];
