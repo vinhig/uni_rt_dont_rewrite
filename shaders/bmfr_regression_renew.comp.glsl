@@ -42,9 +42,14 @@ void mul_vec(float vec_a[W], float vec_b[W], out float vec_r[W], int k) {
 
 void sub_mat_w(float mat_a[W][W], float mat_b[W][W], int k,
                out float mat_r[W][W]) {
+  for (int x = 0; x < W; x++) {
+    for (int y = 0; y < W; y++) {
+      mat_r[x][y] = mat_a[x][y];
+    }
+  }
   for (int x = k; x < W; x++) {
     for (int y = k; y < W; y++) {
-      mat_r[x][y] = mat_a[x][y] - mat_b[x][y];
+      mat_r[x][y] = mat_a[x][y] - mat_b[x - k][y - k];
     }
   }
 }
@@ -58,9 +63,9 @@ float norm_k(float vec[W], int k) {
   return sqrt(sum);
 }
 
-void identity(out float a[W][W], int k) {
-  for (int x = 0; x < W - k; x++) {
-    for (int y = 0; y < W - k; y++) {
+void identity(out float a[W][W]) {
+  for (int x = 0; x < W; x++) {
+    for (int y = 0; y < W; y++) {
       if (x == y) {
         a[x][y] = 1.0;
       } else {
@@ -72,7 +77,7 @@ void identity(out float a[W][W], int k) {
 
 void householder_matrix(out float H[W][W], float v[W], int k) {
   float new_H[W][W];
-  identity(new_H, k);
+  identity(new_H);
 
   float uut;
   for (int i = 0; i < W - k; i++) {
@@ -99,13 +104,6 @@ void householder_step(float t_tilde[W][M + 1], out float H[W][W], int k) {
 
   float sign_a0 = sign(alpha[0]);
   float norm_a = norm_k(alpha, k);
-
-  if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360 &&
-      k == 1) {
-    for (int i = 0; i < W - k; i++) {
-      debug_alpha[i] = norm_a;
-    }
-  }
 
   float e[W];
   e[0] = 1.0;
@@ -147,19 +145,33 @@ void householder_qr(float t_tilde[W][M + 1], out float t_v[W][M + 1]) {
   householder_step(t_tilde, H0, 0);
   mul_mat_H(H0, t_tilde, A0, 0);
 
-  if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
-    for (int i = 0; i < W; i++) {
-      for (int j = 0; j < W; j++) {
-        debug_h[i][j] = A0[i][j];
-      }
-    }
-  }
-
   float H1[W][W];
   float A1[W][M + 1];
 
   householder_step(A0, H1, 1);
   mul_mat_H(H1, A0, A1, 1);
+
+  float H2[W][W];
+  float A2[W][M + 1];
+
+  householder_step(A1, H2, 2);
+  mul_mat_H(H2, A1, A2, 2);
+
+  if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
+    for (int i = 0; i < W; i++) {
+      for (int j = 0; j < W; j++) {
+        debug_h[i][j] = A2[i][j];
+      }
+    }
+  }
+
+  // if (gl_GlobalInvocationID.x == 640 && gl_GlobalInvocationID.y == 360) {
+  //   for (int i = 0; i < W; i++) {
+  //     for (int j = 0; j < W; j++) {
+  //       debug_h[i][j] = H1[i][j];
+  //     }
+  //   }
+  // }
 }
 
 void main() {
