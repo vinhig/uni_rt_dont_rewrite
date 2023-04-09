@@ -93,12 +93,12 @@ BmfrDenoiser::BmfrDenoiser() {
 
   glGenBuffers(1, &debug_1);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 3), &debug_1,
+  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 1), &debug_1,
                GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &debug_2);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 3), &debug_2,
+  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 1), &debug_2,
                GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &debug_3);
@@ -193,8 +193,8 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
   printf("T_tilde =>\n");
   for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 3; j++) {
-      printf("%f ", data[i * (M + 3) + j]);
+    for (int j = 0; j < M + 1; j++) {
+      printf("%f ", data[i * (M + 1) + j]);
     }
     printf("\n");
   }
@@ -208,8 +208,8 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
   printf("R_tilde =>\n");
   for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 3; j++) {
-      printf("%f ", data[i * (M + 3) + j]);
+    for (int j = 0; j < M + 1; j++) {
+      printf("%3.3f ", data[i * (M + 1) + j]);
     }
     printf("\n");
   }
