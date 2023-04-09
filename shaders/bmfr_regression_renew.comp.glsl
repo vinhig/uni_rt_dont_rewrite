@@ -2,13 +2,14 @@
 
 #define BLOCK_SIZE 32
 #define W 16
-#define M 7
-// 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z
-#define NOISE_AMOUNT 0.01
+#define M 10
+// 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z, POS_X², POS_Y², POS_Z²
+#define NOISE_AMOUNT 0.1
+
+#define FEATURES_NOT_SCALED 4
 
 #define OFFSETS_COUNT 32
 const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
-
     vec2(0.5004785746285491, 0.7249900791844404),
     vec2(0.6616787922684506, 0.8431932401454286),
     vec2(0.013792616530536095, 0.07606840902247503),
@@ -40,18 +41,16 @@ const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
     vec2(0.0819085928456772, 0.47462590600346855),
     vec2(0.27586799506009396, 0.23212979598942174),
     vec2(0.502863992002033, 0.07109038503647092),
-    vec2(0.8964918160764741, 0.8827850755057025),
-    /*
-  vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
-  vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
-  vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
-  vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
-  vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
-  vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
-  vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
-  vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,
-  */
-
+    vec2(0.8964918160764741, 0.8827850755057025), /*
+   vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
+   vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
+   vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
+   vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
+   vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
+   vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
+   vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
+   vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,
+ */
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -60,8 +59,9 @@ layout(binding = 0) uniform sampler2D tex_pos;
 layout(binding = 1) uniform sampler2D tex_normal;
 layout(binding = 2) uniform sampler2D tex_depth;
 layout(binding = 3) uniform sampler2D tex_indirect;
+layout(binding = 4) uniform sampler2D tex_albedo;
 
-layout(binding = 4, rgba32f) uniform writeonly image2D tex_out;
+layout(binding = 5, rgba32f) uniform writeonly image2D tex_out;
 
 layout(binding = 0, std140) uniform Reprojection {
   mat4 view_proj;
@@ -258,14 +258,6 @@ void householder_qr(float T_tilde[W][M + 3], out float R[W][M + 3]) {
   householder_step(A4, H5, 5);
   mul_mat_H(H5, A4, A5);
 
-  for (int w = 0; w < W; w++) {
-    for (int m = 0; m < M + 3; m++) {
-      R[w][m] = A5[w][m];
-    }
-  }
-
-  return;
-
   float H6[W][W];
   float A6[W][M + 3];
 
@@ -277,6 +269,20 @@ void householder_qr(float T_tilde[W][M + 3], out float R[W][M + 3]) {
 
   householder_step(A6, H7, 7);
   mul_mat_H(H7, A6, A7);
+
+  float H8[W][W];
+  float A8[W][M + 3];
+
+  householder_step(A7, H8, 7);
+  mul_mat_H(H8, A7, A8);
+
+  for (int w = 0; w < W; w++) {
+    for (int m = 0; m < M + 3; m++) {
+      R[w][m] = A8[w][m];
+    }
+  }
+
+  return;
 }
 
 void resolve(float R[M][M], float r_c[M], out float a[M]) {
@@ -327,10 +333,12 @@ void main() {
 
   float max_values[M];
   float min_values[M];
+  float mag_values[M];
 
-  for (int x = 1; x < M; x++) {
+  for (int x = FEATURES_NOT_SCALED; x < M; x++) {
     max_values[x] = 0.0;
     min_values[x] = 0.0;
+    mag_values[x] = 0.0;
   }
 
   for (int i = 0; i < W; i++) {
@@ -340,40 +348,47 @@ void main() {
               vec2(BLOCK_SIZE));
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
+    vec4 alb = texelFetch(tex_albedo, local_coord, 0);
     T_tilde[i][1] = norm.x;
     T_tilde[i][2] = norm.y;
     T_tilde[i][3] = norm.z;
     T_tilde[i][4] = pos.x;
     T_tilde[i][5] = pos.y;
     T_tilde[i][6] = pos.z;
+    T_tilde[i][7] = pos.x * pos.x;
+    T_tilde[i][8] = pos.y * pos.y;
+    T_tilde[i][9] = pos.z * pos.z;
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    T_tilde[i][7] = noisy.x;
-    T_tilde[i][8] = noisy.y;
-    T_tilde[i][9] = noisy.z;
+    T_tilde[i][10] = noisy.x;
+    T_tilde[i][11] = noisy.y;
+    T_tilde[i][12] = noisy.z;
   }
 
   for (int w = 0; w < W; w++) {
-    for (int m = 1; m < M; m++) {
+    for (int m = FEATURES_NOT_SCALED; m < M; m++) {
       min_values[m] = min(min_values[m], T_tilde[w][m]);
       max_values[m] = max(max_values[m], T_tilde[w][m]);
+      mag_values[m] += T_tilde[w][m] * T_tilde[w][m];
     }
   }
 
-  for (int w = 0; w < W; w++) {
-    for (int m = 1; m < M; m++) {
-      if (max_values[m] - min_values[m] > 1.0) {
-        T_tilde[w][m] =
-            (T_tilde[w][m] - min_values[m]) / (max_values[m] - min_values[m]);
-      } else {
-        T_tilde[w][m] = (T_tilde[w][m] - min_values[m]);
-      }
+  for (int m = FEATURES_NOT_SCALED; m < M; m++) {
+    mag_values[m] = sqrt(mag_values[m]);
+  }
 
-      ivec2 local_coord =
-          coord +
-          ivec2(RELATIVE_OFFSETS[(uniforms.current_frame + w) % OFFSETS_COUNT] *
-                vec2(BLOCK_SIZE));
-      T_tilde[w][m] += add_random(local_coord.x, local_coord.y, w + m);
+  for (int w = 0; w < W; w++) {
+    for (int m = FEATURES_NOT_SCALED; m < M; m++) {
+      // if (max_values[m] - min_values[m] > 1.0) {
+      //   T_tilde[w][m] =
+      //       (T_tilde[w][m] - min_values[m]) / (max_values[m] -
+      //       min_values[m]);
+      // } else {
+      //   T_tilde[w][m] = (T_tilde[w][m] - min_values[m]);
+      // }
+      // T_tilde[w][m] /= mag_values[m];
+
+      // T_tilde[w][m] += add_random(m, int(m + uniforms.current_frame), m);
     }
   }
 
@@ -413,7 +428,7 @@ void main() {
   float alpha_blue[M];
   resolve(R, r_blue, alpha_blue);
 
-  if (coord.x == 20*32 && coord.y == 10*32) {
+  if (coord.x == 20 * 32 && coord.y == 10 * 32) {
     for (int w = 0; w < W; w++) {
       for (int m = 0; m < (M + 3); m++) {
         debug_tilde[w][m] = T_tilde[w][m];
@@ -438,6 +453,7 @@ void main() {
       vec4 pos = texelFetch(tex_pos, coord + ivec2(offx, offy), 0);
       vec4 norm = texelFetch(tex_normal, coord + ivec2(offx, offy), 0);
       vec4 depth = texelFetch(tex_depth, coord + ivec2(offx, offy), 0);
+      vec4 alb = texelFetch(tex_albedo, coord + ivec2(offx, offy), 0);
       if (depth.x == 1) {
         continue;
       }
@@ -449,13 +465,26 @@ void main() {
       features[4] = pos.x;
       features[5] = pos.y;
       features[6] = pos.z;
-      for (int m = 1; m < M; m++) {
-        features[m] =
-            (features[m] - min_values[m]) / (max_values[m] - min_values[m]);
+      features[7] = pos.x * pos.x;
+      features[8] = pos.y * pos.y;
+      features[9] = pos.z * pos.z;
+      for (int m = FEATURES_NOT_SCALED; m < M; m++) {
+        // features[m] =
+        //     (features[m] - min_values[m]) / (max_values[m] - min_values[m]);
+        // features[m] /= mag_values[m];
       }
       float red = dot_m(alpha_red, features);
       float green = dot_m(alpha_green, features);
       float blue = dot_m(alpha_blue, features);
+      if (red < 0.0) {
+        red = 0.0;
+      }
+      if (green < 0.0) {
+        green = 0.0;
+      }
+      if (blue < 0.0) {
+        blue = 0.0;
+      }
       // imageStore(tex_out, coord + ivec2(offx, offy),
       //            vec4(alpha_red[0], alpha_red[1], alpha_red[2],
       //            alpha_red[3]));

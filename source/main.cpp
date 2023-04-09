@@ -7,10 +7,10 @@ int main() {
 
     auto render = new UniRt::Render();
 
-    auto scene = new UniRt::Scene("/home/vincent/Documents/dragon.glb");
+    auto scene = new UniRt::Scene("/home/vincent/Documents/bench.glb");
 
     // render->SetScene(scene, "/home/vincent/Documents/cute_map.glb");
-    render->SetScene(scene, "/home/vincent/Documents/dragon.glb");
+    render->SetScene(scene, "/home/vincent/Documents/bench.glb");
 
     while (!render->Update()) {
 

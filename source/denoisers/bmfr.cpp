@@ -7,7 +7,7 @@
 #include <sstream>
 
 #define W 16
-#define M 7
+#define M 10
 #define BLOCK_SIZE 32
 
 namespace UniRt {
@@ -130,7 +130,10 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glActiveTexture(GL_TEXTURE3);
   glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
 
-  glBindImageTexture(4, denoised_texture[current_frame % 2], 0, 0, 0,
+  glActiveTexture(GL_TEXTURE4);
+  glBindTexture(GL_TEXTURE_2D, textures.albedo_texture[current_frame % 2]);
+
+  glBindImageTexture(5, denoised_texture[current_frame % 2], 0, 0, 0,
                      GL_READ_WRITE, GL_RGBA32F);
 
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, debug_1);
