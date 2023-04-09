@@ -323,6 +323,9 @@ float dot_m(float a[M], float b[M]) {
 
 void main() {
   ivec2 coord = ivec2(gl_GlobalInvocationID.xy) * BLOCK_SIZE;
+  coord +=
+      ivec2(RELATIVE_OFFSETS[(coord.x + uniforms.current_frame) % OFFSETS_COUNT] *
+            vec2(BLOCK_SIZE/2));
 
   if (coord.x > uniforms.target_dim.x || coord.y > uniforms.target_dim.y) {
     return;

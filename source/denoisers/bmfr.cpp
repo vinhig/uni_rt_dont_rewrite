@@ -8,7 +8,7 @@
 
 #define W 16
 #define M 10
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 32
 
 namespace UniRt {
 
