@@ -33,6 +33,9 @@ public:
   GLuint debug_3;
   GLuint debug_4;
 
+  GLuint tmp_buffer_H;
+  GLuint tmp_buffer_R;
+
   bool NeedPreTemporalAccumulation() override { return true; }
 
   GLuint Denoise(BunchOfTexture &textures, int current_frame) override;

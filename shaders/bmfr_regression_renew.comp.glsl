@@ -1,15 +1,15 @@
 #version 430
 
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 64
 #define W 16
 #define M 10
 // 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z, POS_X², POS_Y², POS_Z²
-#define NOISE_AMOUNT 0.1
+#define NOISE_AMOUNT 0.01
 
 #define FEATURES_NOT_SCALED 4
 
-#define OFFSETS_COUNT 32
-const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
+#define OFFSETS_COUNT 16
+const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT * 2] = {
     vec2(0.5004785746285491, 0.7249900791844404),
     vec2(0.6616787922684506, 0.8431932401454286),
     vec2(0.013792616530536095, 0.07606840902247503),
@@ -42,15 +42,15 @@ const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
     vec2(0.27586799506009396, 0.23212979598942174),
     vec2(0.502863992002033, 0.07109038503647092),
     vec2(0.8964918160764741, 0.8827850755057025), /*
-   vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
-   vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
-   vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
-   vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
-   vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
-   vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
-   vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
-   vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,
- */
+    vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
+    vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
+    vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
+    vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
+    vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
+    vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
+    vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
+    vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,*/
+
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -354,7 +354,10 @@ void main() {
   }
 
   for (int i = 0; i < W; i++) {
-    ivec2 local_coord = coord + ivec2(RELATIVE_OFFSETS[(i + uniforms.current_frame) % OFFSETS_COUNT] * vec2(BLOCK_SIZE));
+    ivec2 local_coord =
+        coord +
+        ivec2(RELATIVE_OFFSETS[(i + uniforms.current_frame) % OFFSETS_COUNT] *
+              vec2(BLOCK_SIZE));
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
     vec4 alb = texelFetch(tex_albedo, local_coord, 0);
@@ -369,7 +372,7 @@ void main() {
     T_tilde[i][9] = pos.z * pos.z;
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    T_tilde[i][10] = noisy.x;
+    T_tilde[i][10] = noisy.y;
   }
 
   for (int w = 0; w < W; w++) {
@@ -385,7 +388,7 @@ void main() {
   }
 
   for (int w = 0; w < W; w++) {
-    for (int m = FEATURES_NOT_SCALED; m < M; m++) {
+    for (int m = 1; m < M; m++) {
       // if (max_values[m] - min_values[m] > 1.0) {
       //   T_tilde[w][m] =
       //       (T_tilde[w][m] - min_values[m]) / (max_values[m] -
@@ -393,33 +396,65 @@ void main() {
       // } else {
       //   T_tilde[w][m] = (T_tilde[w][m] - min_values[m]);
       // }
-      T_tilde[w][m] /= mag_values[m];
+      if (m >= FEATURES_NOT_SCALED) {
+        T_tilde[w][m] /= mag_values[m];
+      }
 
-      // T_tilde[w][m] += add_random(m, int(m + uniforms.current_frame), m);
+      T_tilde[w][m] += add_random(w, int(m + uniforms.current_frame), m);
     }
   }
 
   // Compute QR factorization for T_tilde
-  float R_tilde[W][M + 1];
-  householder_qr(T_tilde, R_tilde);
+  float R_red_tilde[W][M + 1];
+  householder_qr(T_tilde, R_red_tilde);
+
+  for (int w = 0; w < W; w++) {
+    ivec2 local_coord =
+        coord +
+        ivec2(RELATIVE_OFFSETS[(w + uniforms.current_frame) % OFFSETS_COUNT] *
+              vec2(BLOCK_SIZE));
+    T_tilde[w][M] = texelFetch(tex_indirect, local_coord, 0).y;
+  }
+
+  float R_green_tilde[W][M + 1];
+  householder_qr(T_tilde, R_green_tilde);
+
+  for (int w = 0; w < W; w++) {
+    ivec2 local_coord =
+        coord +
+        ivec2(RELATIVE_OFFSETS[(w + uniforms.current_frame) % OFFSETS_COUNT] *
+              vec2(BLOCK_SIZE));
+    T_tilde[w][M] = texelFetch(tex_indirect, local_coord, 0).z;
+  }
+
+  float R_blue_tilde[W][M + 1];
+  householder_qr(T_tilde, R_blue_tilde);
 
   // Extract R and a r for each channel
   float R[M][M];
   float r_red[M];
+  float r_green[M];
+  float r_blue[M];
 
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < M; j++) {
-      R[i][j] = R_tilde[i][j];
+      R[i][j] = R_red_tilde[i][j];
     }
   }
 
   for (int j = 0; j < M; j++) {
-    r_red[j] = R_tilde[j][M];
+    r_red[j] = R_red_tilde[j][M];
+    r_green[j] = R_green_tilde[j][M];
+    r_blue[j] = R_blue_tilde[j][M];
   }
 
   // Resolve Ra=r
   float alpha_red[M];
   resolve(R, r_red, alpha_red);
+  float alpha_green[M];
+  resolve(R, r_green, alpha_green);
+  float alpha_blue[M];
+  resolve(R, r_blue, alpha_blue);
 
   if (coord.x == 20 * 32 && coord.y == 10 * 32) {
     for (int w = 0; w < W; w++) {
@@ -430,7 +465,7 @@ void main() {
 
     for (int w = 0; w < W; w++) {
       for (int m = 0; m < (M + 1); m++) {
-        debug_h[w][m] = R_tilde[w][m];
+        debug_h[w][m] = R_red_tilde[w][m];
       }
     }
 
@@ -470,11 +505,19 @@ void main() {
       if (red < 0.0) {
         red = 0.0;
       }
+      float green = dot_m(alpha_green, features);
+      if (green < 0.0) {
+        green = 0.0;
+      }
+      float blue = dot_m(alpha_blue, features);
+      if (blue < 0.0) {
+        blue = 0.0;
+      }
       // imageStore(tex_out, coord + ivec2(offx, offy),
       //            vec4(alpha_red[0], alpha_red[1], alpha_red[2],
       //            alpha_red[3]));
       imageStore(tex_out, coord + ivec2(offx, offy),
-                 vec4(red, red, red, 1.0));
+                 vec4(red, green, blue, 1.0));
     }
   }
 }

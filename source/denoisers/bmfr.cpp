@@ -8,7 +8,7 @@
 
 #define W 16
 #define M 10
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 64
 
 namespace UniRt {
 
@@ -111,6 +111,20 @@ BmfrDenoiser::BmfrDenoiser() {
   glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W, &debug_4,
                GL_DYNAMIC_DRAW);
 
+  glGenBuffers(1, &tmp_buffer_H);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_buffer_H);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * W * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &tmp_buffer_H, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &tmp_buffer_R);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_buffer_R);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &tmp_buffer_R, GL_DYNAMIC_DRAW);
+
   printf("hello from bmfr denoiser\n");
 }
 
@@ -140,6 +154,9 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, debug_2);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, debug_3);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, debug_4);
+
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, tmp_buffer_H);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, tmp_buffer_R);
 
   // glActiveTexture(GL_TEXTURE8);
   // glBindTexture(GL_TEXTURE_2D, textures.albedo_texture[current_frame % 2]);

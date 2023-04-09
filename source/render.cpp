@@ -55,7 +55,7 @@ out vec4 color;
 void main(void){ 
 	vec2 uv = vec2(gl_FragCoord.x, gl_FragCoord.y) / vec2(1280, 720);
 
-	color = vec4(texture(denoised, uv, 0).xyz /** texture(albedo, uv, 0).xyz*/, 1.0);
+	color = vec4(texture(denoised, uv, 0).xyz * texture(albedo, uv, 0).xyz, 1.0);
 
   // Apply gamma correction
   // color = pow(color, vec4(1.0/2.2));
@@ -205,9 +205,9 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.angle = glm::radians(-30.0f);
+  camera.angle = glm::radians(30.0f);
   camera.speed = 0.0f;
-  camera.distance = 12.0f;
+  camera.distance = 24.0f;
   camera.center = glm::vec3(0.0f, 4.0f, 0.0f);
 
   int yo = 0;
