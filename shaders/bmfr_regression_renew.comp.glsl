@@ -2,8 +2,8 @@
 
 #define BLOCK_SIZE 32
 #define W 16
-#define M 4
-// 1, NORM_X, NORM_Y, NORM_Z
+#define M 7
+// 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z
 #define NOISE_AMOUNT 0.01
 
 #define OFFSETS_COUNT 32
@@ -81,13 +81,13 @@ layout(binding = 0, std140) uniform Reprojection {
 }
 uniforms;
 
-// layout(std430, binding = 5) buffer debug_1 { float debug_tilde[W][M + 3]; };
+layout(std430, binding = 5) buffer debug_1 { float debug_tilde[W][M + 3]; };
 
-// layout(std430, binding = 6) buffer debug_2 { float debug_h[W][M + 3]; };
+layout(std430, binding = 6) buffer debug_2 { float debug_h[W][M + 3]; };
 
-// layout(std430, binding = 7) buffer debug_3 { float debug_alpha[W]; };
+layout(std430, binding = 7) buffer debug_3 { float debug_alpha[W]; };
 
-// layout(std430, binding = 8) buffer debug_4 { float debug_other[W]; };
+layout(std430, binding = 8) buffer debug_4 { float debug_other[W]; };
 
 float random(uint a) {
   a = (a + uint(2127912214u)) + (a << uint(12));
@@ -243,39 +243,39 @@ void householder_qr(float T_tilde[W][M + 3], out float R[W][M + 3]) {
   float H3[W][W];
   float A3[W][M + 3];
 
-  householder_step(A2, H3, 2);
+  householder_step(A2, H3, 3);
   mul_mat_H(H3, A2, A3);
-
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 3; j++) {
-      R[j][i] = A3[j][i];
-    }
-  }
-
-  return;
 
   float H4[W][W];
   float A4[W][M + 3];
 
-  householder_step(A3, H4, 2);
+  householder_step(A3, H4, 4);
   mul_mat_H(H4, A3, A4);
 
   float H5[W][W];
   float A5[W][M + 3];
 
-  householder_step(A4, H5, 2);
+  householder_step(A4, H5, 5);
   mul_mat_H(H5, A4, A5);
+
+  for (int w = 0; w < W; w++) {
+    for (int m = 0; m < M + 3; m++) {
+      R[w][m] = A5[w][m];
+    }
+  }
+
+  return;
 
   float H6[W][W];
   float A6[W][M + 3];
 
-  householder_step(A5, H6, 2);
+  householder_step(A5, H6, 6);
   mul_mat_H(H6, A5, A6);
 
   float H7[W][W];
   float A7[W][M + 3];
 
-  householder_step(A6, H7, 2);
+  householder_step(A6, H7, 7);
   mul_mat_H(H7, A6, A7);
 }
 
@@ -306,10 +306,13 @@ float dot_m(float a[M], float b[M]) {
 void main() {
   ivec2 coord = ivec2(gl_GlobalInvocationID.xy) * BLOCK_SIZE;
 
+  if (coord.x > uniforms.target_dim.x || coord.y > uniforms.target_dim.y) {
+    return;
+  }
+
   for (int offx = 0; offx < BLOCK_SIZE; offx++) {
     for (int offy = 0; offy < BLOCK_SIZE; offy++) {
-      imageStore(tex_out, coord + ivec2(offx, offy),
-                 vec4(coord / uniforms.target_dim, 1.0, 1.0));
+      imageStore(tex_out, coord + ivec2(offx, offy), vec4(0.0));
     }
   }
 
@@ -322,13 +325,13 @@ void main() {
     T_tilde[i][0] = 1.0;
   }
 
-  // float max_values[M];
-  // float min_values[M];
+  float max_values[M];
+  float min_values[M];
 
-  // for (int x = 1; x < M; x++) {
-  //   max_values[x] = 0.0;
-  //   min_values[x] = 0.0;
-  // }
+  for (int x = 1; x < M; x++) {
+    max_values[x] = 0.0;
+    min_values[x] = 0.0;
+  }
 
   for (int i = 0; i < W; i++) {
     ivec2 local_coord =
@@ -337,36 +340,42 @@ void main() {
               vec2(BLOCK_SIZE));
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
-    T_tilde[i][1] = norm.x + add_random(local_coord.x, local_coord.y, i + 4);
-    T_tilde[i][2] = norm.y + add_random(local_coord.x, local_coord.y, i + 5);
-    T_tilde[i][3] = norm.z + add_random(local_coord.x, local_coord.y, i + 6);
+    T_tilde[i][1] = norm.x;
+    T_tilde[i][2] = norm.y;
+    T_tilde[i][3] = norm.z;
+    T_tilde[i][4] = pos.x;
+    T_tilde[i][5] = pos.y;
+    T_tilde[i][6] = pos.z;
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    T_tilde[i][4] = noisy.x;
-    T_tilde[i][5] = noisy.y;
-    T_tilde[i][6] = noisy.z;
+    T_tilde[i][7] = noisy.x;
+    T_tilde[i][8] = noisy.y;
+    T_tilde[i][9] = noisy.z;
   }
 
-  // for (int i = 0; i < W; i++) {
-  //   for (int x = 1; x < M; x++) {
-  //     min_values[x] = min(min_values[x], T_tilde[i][x]);
-  //     max_values[x] = max(max_values[x], T_tilde[i][x]);
-  //   }
-  // }
+  for (int w = 0; w < W; w++) {
+    for (int m = 1; m < M; m++) {
+      min_values[m] = min(min_values[m], T_tilde[w][m]);
+      max_values[m] = max(max_values[m], T_tilde[w][m]);
+    }
+  }
 
-  // for (int i = 0; i < W; i++) {
-  //   for (int x = 1; x < 4; x++) {
-  //     T_tilde[i][x] =
-  //         (T_tilde[i][x] - min_values[x]) / (max_values[x] - min_values[x]);
+  for (int w = 0; w < W; w++) {
+    for (int m = 1; m < M; m++) {
+      if (max_values[m] - min_values[m] > 1.0) {
+        T_tilde[w][m] =
+            (T_tilde[w][m] - min_values[m]) / (max_values[m] - min_values[m]);
+      } else {
+        T_tilde[w][m] = (T_tilde[w][m] - min_values[m]);
+      }
 
-  //     ivec2 local_coord =
-  //         coord +
-  //         ivec2(RELATIVE_OFFSETS[(uniforms.current_frame + i) %
-  //         OFFSETS_COUNT] *
-  //               vec2(BLOCK_SIZE));
-  //     T_tilde[i][x] += add_random(local_coord.x, local_coord.y, i + x);
-  //   }
-  // }
+      ivec2 local_coord =
+          coord +
+          ivec2(RELATIVE_OFFSETS[(uniforms.current_frame + w) % OFFSETS_COUNT] *
+                vec2(BLOCK_SIZE));
+      T_tilde[w][m] += add_random(local_coord.x, local_coord.y, w + m);
+    }
+  }
 
   // Compute QR factorization for T_tilde
   float R_tilde[W][M + 3];
@@ -404,6 +413,24 @@ void main() {
   float alpha_blue[M];
   resolve(R, r_blue, alpha_blue);
 
+  if (coord.x == 20*32 && coord.y == 10*32) {
+    for (int w = 0; w < W; w++) {
+      for (int m = 0; m < (M + 3); m++) {
+        debug_tilde[w][m] = T_tilde[w][m];
+      }
+    }
+
+    for (int w = 0; w < W; w++) {
+      for (int m = 0; m < (M + 3); m++) {
+        debug_h[w][m] = R_tilde[w][m];
+      }
+    }
+
+    for (int m = 0; m < (M); m++) {
+      debug_alpha[m] = alpha_green[m];
+    }
+  }
+
   // Output results
   for (int offx = 0; offx < BLOCK_SIZE; offx++) {
     for (int offy = 0; offy < BLOCK_SIZE; offy++) {
@@ -419,10 +446,13 @@ void main() {
       features[1] = norm.x;
       features[2] = norm.y;
       features[3] = norm.z;
-      // for (int x = 1; x < 4; x++) {
-      //   features[x] =
-      //       (features[x] - min_values[x]) / (max_values[x] - min_values[x]);
-      // }
+      features[4] = pos.x;
+      features[5] = pos.y;
+      features[6] = pos.z;
+      for (int m = 1; m < M; m++) {
+        features[m] =
+            (features[m] - min_values[m]) / (max_values[m] - min_values[m]);
+      }
       float red = dot_m(alpha_red, features);
       float green = dot_m(alpha_green, features);
       float blue = dot_m(alpha_blue, features);

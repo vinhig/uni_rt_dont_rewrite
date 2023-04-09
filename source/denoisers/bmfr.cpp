@@ -7,7 +7,7 @@
 #include <sstream>
 
 #define W 16
-#define M 4
+#define M 7
 #define BLOCK_SIZE 32
 
 namespace UniRt {
@@ -184,41 +184,39 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   // printf("\n");
 
   // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-  /*
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
-    float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
-    printf("T_tilde =>\n");
-    for (int i = 0; i < W; i++) {
-      for (int j = 0; j < M + 3; j++) {
-        printf("%f ", data[i * (M+3) + j]);
-      }
-      printf("\n");
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
+  float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+
+  printf("T_tilde =>\n");
+  for (int i = 0; i < W; i++) {
+    for (int j = 0; j < M + 3; j++) {
+      printf("%f ", data[i * (M + 3) + j]);
     }
-
     printf("\n");
+  }
 
-    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+  printf("\n");
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
-    data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-    printf("R_tilde =>\n");
-    for (int i = 0; i < W; i++) {
-      for (int j = 0; j < M + 3; j++) {
-        printf("%f ", data[i * (M+3) + j]);
-      }
-      printf("\n");
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
+  data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+
+  printf("R_tilde =>\n");
+  for (int i = 0; i < W; i++) {
+    for (int j = 0; j < M + 3; j++) {
+      printf("%f ", data[i * (M + 3) + j]);
     }
-
     printf("\n");
+  }
 
-    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+  printf("\n");
 
-
+  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_3);
-  float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+  data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
   printf("alpha_red =>\n");
   for (int j = 0; j < M; j++) {
@@ -228,7 +226,6 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   printf("\n");
 
   glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-*/
   return denoised_texture[current_frame % 2];
 }
 

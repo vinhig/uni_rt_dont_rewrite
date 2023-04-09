@@ -205,9 +205,9 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.angle = glm::radians(30.0f);
+  camera.angle = glm::radians(-30.0f);
   camera.speed = 0.0f;
-  camera.distance = 24.0f;
+  camera.distance = 12.0f;
   camera.center = glm::vec3(0.0f, 4.0f, 0.0f);
 
   int yo = 0;

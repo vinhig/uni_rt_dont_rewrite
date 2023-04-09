@@ -37,7 +37,7 @@ public:
 
   GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
 
-  bool NeedPostTemporalAccumulation() override { return true; }
+  bool NeedPostTemporalAccumulation() override { return false; }
 
   void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 };
