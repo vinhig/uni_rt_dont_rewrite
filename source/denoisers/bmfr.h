@@ -33,11 +33,11 @@ public:
   GLuint debug_3;
   GLuint debug_4;
 
-  bool NeedPreTemporalAccumulation() override { return false; }
+  bool NeedPreTemporalAccumulation() override { return true; }
 
   GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
 
-  bool NeedPostTemporalAccumulation() override { return false; }
+  bool NeedPostTemporalAccumulation() override { return true; }
 
   void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 };

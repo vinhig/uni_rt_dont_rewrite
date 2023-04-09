@@ -2,12 +2,13 @@
 
 #define BLOCK_SIZE 32
 #define W 16
-#define M 7
-// 1, POS_X², POS_Y², POS_Z², NORM_X², NORM_Y², NORM_Z²
-#define NOISE_AMOUNT 0.1
+#define M 4
+// 1, NORM_X, NORM_Y, NORM_Z
+#define NOISE_AMOUNT 0.01
 
 #define OFFSETS_COUNT 32
 const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
+
     vec2(0.5004785746285491, 0.7249900791844404),
     vec2(0.6616787922684506, 0.8431932401454286),
     vec2(0.013792616530536095, 0.07606840902247503),
@@ -50,6 +51,7 @@ const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT] = {
   vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
   vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,
   */
+
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -320,6 +322,14 @@ void main() {
     T_tilde[i][0] = 1.0;
   }
 
+  // float max_values[M];
+  // float min_values[M];
+
+  // for (int x = 1; x < M; x++) {
+  //   max_values[x] = 0.0;
+  //   min_values[x] = 0.0;
+  // }
+
   for (int i = 0; i < W; i++) {
     ivec2 local_coord =
         coord +
@@ -327,26 +337,36 @@ void main() {
               vec2(BLOCK_SIZE));
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
-    T_tilde[i][1] = pos.x * pos.x;
-    T_tilde[i][2] = pos.y * pos.y;
-    T_tilde[i][3] = pos.z * pos.z;
-    T_tilde[i][4] = norm.x * norm.x;
-    T_tilde[i][5] = norm.y * norm.y;
-    T_tilde[i][6] = norm.z * norm.z;
-
-    T_tilde[i][1] += add_random(local_coord.x, local_coord.y, i + 1);
-    T_tilde[i][2] += add_random(local_coord.x, local_coord.y, i + 2);
-    T_tilde[i][3] += add_random(local_coord.x, local_coord.y, i + 3);
-
-    T_tilde[i][4] += add_random(local_coord.x, local_coord.y, i + 4);
-    T_tilde[i][5] += add_random(local_coord.x, local_coord.y, i + 5);
-    T_tilde[i][6] += add_random(local_coord.x, local_coord.y, i + 6);
+    T_tilde[i][1] = norm.x + add_random(local_coord.x, local_coord.y, i + 4);
+    T_tilde[i][2] = norm.y + add_random(local_coord.x, local_coord.y, i + 5);
+    T_tilde[i][3] = norm.z + add_random(local_coord.x, local_coord.y, i + 6);
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    T_tilde[i][7] = noisy.x;
-    T_tilde[i][8] = noisy.y;
-    T_tilde[i][9] = noisy.z;
+    T_tilde[i][4] = noisy.x;
+    T_tilde[i][5] = noisy.y;
+    T_tilde[i][6] = noisy.z;
   }
+
+  // for (int i = 0; i < W; i++) {
+  //   for (int x = 1; x < M; x++) {
+  //     min_values[x] = min(min_values[x], T_tilde[i][x]);
+  //     max_values[x] = max(max_values[x], T_tilde[i][x]);
+  //   }
+  // }
+
+  // for (int i = 0; i < W; i++) {
+  //   for (int x = 1; x < 4; x++) {
+  //     T_tilde[i][x] =
+  //         (T_tilde[i][x] - min_values[x]) / (max_values[x] - min_values[x]);
+
+  //     ivec2 local_coord =
+  //         coord +
+  //         ivec2(RELATIVE_OFFSETS[(uniforms.current_frame + i) %
+  //         OFFSETS_COUNT] *
+  //               vec2(BLOCK_SIZE));
+  //     T_tilde[i][x] += add_random(local_coord.x, local_coord.y, i + x);
+  //   }
+  // }
 
   // Compute QR factorization for T_tilde
   float R_tilde[W][M + 3];
@@ -390,19 +410,27 @@ void main() {
       // Fetch feature for this pixel
       vec4 pos = texelFetch(tex_pos, coord + ivec2(offx, offy), 0);
       vec4 norm = texelFetch(tex_normal, coord + ivec2(offx, offy), 0);
+      vec4 depth = texelFetch(tex_depth, coord + ivec2(offx, offy), 0);
+      if (depth.x == 1) {
+        continue;
+      }
       float features[M];
       features[0] = 1.0;
-      features[1] = pos.x * pos.x;
-      features[2] = pos.y * pos.y;
-      features[3] = pos.z * pos.z;
-      features[4] = norm.x * norm.x;
-      features[5] = norm.y * norm.y;
-      features[6] = norm.z * norm.z;
+      features[1] = norm.x;
+      features[2] = norm.y;
+      features[3] = norm.z;
+      // for (int x = 1; x < 4; x++) {
+      //   features[x] =
+      //       (features[x] - min_values[x]) / (max_values[x] - min_values[x]);
+      // }
       float red = dot_m(alpha_red, features);
       float green = dot_m(alpha_green, features);
       float blue = dot_m(alpha_blue, features);
+      // imageStore(tex_out, coord + ivec2(offx, offy),
+      //            vec4(alpha_red[0], alpha_red[1], alpha_red[2],
+      //            alpha_red[3]));
       imageStore(tex_out, coord + ivec2(offx, offy),
-                 vec4(alpha_red[0], alpha_red[1], alpha_red[2], alpha_red[3]));
+                 vec4(red, green, blue, 1.0));
     }
   }
 }
