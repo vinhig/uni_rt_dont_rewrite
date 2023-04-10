@@ -33,8 +33,14 @@ public:
   GLuint debug_3;
   GLuint debug_4;
 
-  GLuint tmp_buffer_H;
-  GLuint tmp_buffer_R;
+  GLuint red_tilde;
+  GLuint green_tilde;
+  GLuint blue_tilde;
+
+  GLuint tilde;
+  GLuint r;
+  GLuint h_tmp;
+  GLuint a_tmp;
 
   bool NeedPreTemporalAccumulation() override { return true; }
 

@@ -7,8 +7,8 @@
 #include <sstream>
 
 #define W 16
-#define M 10
-#define BLOCK_SIZE 16
+#define M 4
+#define BLOCK_SIZE 64
 
 namespace UniRt {
 
@@ -111,19 +111,54 @@ BmfrDenoiser::BmfrDenoiser() {
   glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W, &debug_4,
                GL_DYNAMIC_DRAW);
 
-  glGenBuffers(1, &tmp_buffer_H);
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_buffer_H);
-  glBufferData(GL_SHADER_STORAGE_BUFFER,
-               sizeof(float) * W * W * (1280 / BLOCK_SIZE) *
-                   (1280 / BLOCK_SIZE),
-               &tmp_buffer_H, GL_DYNAMIC_DRAW);
-
-  glGenBuffers(1, &tmp_buffer_R);
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_buffer_R);
+  glGenBuffers(1, &red_tilde);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, red_tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &tmp_buffer_R, GL_DYNAMIC_DRAW);
+               &red_tilde, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &green_tilde);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, green_tilde);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &green_tilde, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &blue_tilde);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, blue_tilde);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &blue_tilde, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &tilde);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tilde);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &tilde, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &r);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, r);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &r, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &h_tmp);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, h_tmp);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &h_tmp, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &a_tmp);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, a_tmp);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &a_tmp, GL_DYNAMIC_DRAW);
 
   printf("hello from bmfr denoiser\n");
 }
@@ -150,13 +185,16 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glBindImageTexture(5, denoised_texture[current_frame % 2], 0, 0, 0,
                      GL_READ_WRITE, GL_RGBA32F);
 
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, debug_1);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, debug_2);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, debug_3);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, debug_4);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, red_tilde);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, green_tilde);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, blue_tilde);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilde);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, r);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, h_tmp);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, a_tmp);
 
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, tmp_buffer_H);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, tmp_buffer_R);
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, tmp_buffer_H);
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, tmp_buffer_R);
 
   // glActiveTexture(GL_TEXTURE8);
   // glBindTexture(GL_TEXTURE_2D, textures.albedo_texture[current_frame % 2]);
@@ -205,47 +243,47 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
   // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
-  float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
+  // float *data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
-  printf("T_tilde =>\n");
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 1; j++) {
-      printf("%f ", data[i * (M + 1) + j]);
-    }
-    printf("\n");
-  }
+  // printf("T_tilde =>\n");
+  // for (int i = 0; i < W; i++) {
+  //   for (int j = 0; j < M + 1; j++) {
+  //     printf("%f ", data[i * (M + 1) + j]);
+  //   }
+  //   printf("\n");
+  // }
 
-  printf("\n");
+  // printf("\n");
 
-  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+  // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
-  data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
+  // data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
-  printf("R_tilde =>\n");
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 1; j++) {
-      printf("%3.3f ", data[i * (M + 1) + j]);
-    }
-    printf("\n");
-  }
+  // printf("R_tilde =>\n");
+  // for (int i = 0; i < W; i++) {
+  //   for (int j = 0; j < M + 1; j++) {
+  //     printf("%3.3f ", data[i * (M + 1) + j]);
+  //   }
+  //   printf("\n");
+  // }
 
-  printf("\n");
+  // printf("\n");
 
-  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+  // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_3);
-  data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_3);
+  // data = (float *)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 
-  printf("alpha_red =>\n");
-  for (int j = 0; j < M; j++) {
-    printf("%f ", data[j]);
-  }
+  // printf("alpha_red =>\n");
+  // for (int j = 0; j < M; j++) {
+  //   printf("%f ", data[j]);
+  // }
 
-  printf("\n");
+  // printf("\n");
 
-  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+  // glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
   return denoised_texture[current_frame % 2];
 }
 
