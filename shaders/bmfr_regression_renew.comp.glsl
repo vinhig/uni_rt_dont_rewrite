@@ -5,7 +5,7 @@
 #define S_W 4
 #define M 4
 // 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z, POS_X², POS_Y², POS_Z²
-#define NOISE_AMOUNT 0.1
+#define NOISE_AMOUNT 0.01
 
 #define FEATURES_NOT_SCALED 4
 
@@ -117,38 +117,6 @@ float add_random(int x, int y, int feature_buffer) {
           0.5);
 }
 
-void add_vec(float vec_a[W], float vec_b[W], out float vec_r[W], int k) {
-  for (int i = 0; i < W - k; i++) {
-    vec_r[i] = vec_a[i] + vec_b[i];
-  }
-}
-
-void mul_vec_s(float vec_a[W], float b, out float vec_r[W], int k) {
-  for (int i = 0; i < W - k; i++) {
-    vec_r[i] = vec_a[i] * b;
-  }
-}
-
-void mul_vec(float vec_a[W], float vec_b[W], out float vec_r[W], int k) {
-  for (int i = 0; i < W - k; i++) {
-    vec_r[i] = vec_a[i] * vec_b[i];
-  }
-}
-
-void sub_mat_w(float mat_a[W][W], float mat_b[W][W], int k,
-               out float mat_r[W][W]) {
-  for (int x = 0; x < W; x++) {
-    for (int y = 0; y < W; y++) {
-      mat_r[x][y] = mat_a[x][y];
-    }
-  }
-  for (int x = k; x < W; x++) {
-    for (int y = k; y < W; y++) {
-      mat_r[x][y] = mat_a[x][y] - mat_b[x - k][y - k];
-    }
-  }
-}
-
 float norm_k(float vec[W], int k) {
   float sum = 0.0;
   for (int i = 0; i < W - k; i++) {
@@ -158,35 +126,29 @@ float norm_k(float vec[W], int k) {
   return sqrt(sum);
 }
 
-void identity(out float a[W][W]) {
-  for (int x = 0; x < W; x++) {
-    for (int y = 0; y < W; y++) {
-      if (x == y) {
-        a[x][y] = 1.0;
-      } else {
-        a[x][y] = 0.0;
-      }
-    }
-  }
-}
-
 void householder_matrix(out float H[W][W], float v[W], int k) {
-  float new_H[W][W];
-  identity(new_H);
-
   float uut;
   for (int i = 0; i < W - k; i++) {
     uut += v[i] * v[i];
   }
 
-  float utu[W][W];
-  for (int x = 0; x < W - k; x++) {
-    for (int y = 0; y < W - k; y++) {
-      utu[y][x] = v[x] * v[y] / uut * 2;
+  for (int x = 0; x < W; x++) {
+    for (int y = 0; y < W; y++) {
+      if (x < k || y < k) {
+        if (x == y) {
+          H[x][y] = 1.0;
+        } else {
+          H[x][y] = 0.0;
+        }
+      } else {
+        if (x == y) {
+          H[x][y] = 1.0 - v[x - k] * v[y - k] / uut * 2;
+        } else {
+          H[x][y] = 0.0 - v[x - k] * v[y - k] / uut * 2;
+        }
+      }
     }
   }
-
-  sub_mat_w(new_H, utu, k, H);
 }
 
 void householder_step(float T_tilde[W][M + 1], out float H[W][W], int k) {
@@ -200,15 +162,11 @@ void householder_step(float T_tilde[W][M + 1], out float H[W][W], int k) {
   float sign_a0 = sign(alpha[0]);
   float norm_a = norm_k(alpha, k);
 
-  float e[W];
-  e[0] = 1.0;
-  for (int i = 1; i < W; i++) {
-    e[i] = 0.0;
-  }
-
   float v[W];
-  mul_vec_s(e, sign_a0 * norm_a, v, k);
-  add_vec(alpha, v, v, k);
+  v[0] = sign_a0 * norm_a + alpha[0];
+  for (int i = 1; i < W; i++) {
+    v[i] = v[i] + alpha[i];
+  }
 
   // Compute the corresponding householder matrix
   float h[W][W];
