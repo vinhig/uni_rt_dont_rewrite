@@ -1,56 +1,32 @@
 #version 430
 
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 16
 #define W 16
+#define S_W 4
 #define M 10
 // 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z, POS_X², POS_Y², POS_Z²
-#define NOISE_AMOUNT 0.01
+#define NOISE_AMOUNT 0.1
 
 #define FEATURES_NOT_SCALED 4
 
-#define OFFSETS_COUNT 16
-const vec2 RELATIVE_OFFSETS[OFFSETS_COUNT * 2] = {
-    vec2(0.5004785746285491, 0.7249900791844404),
-    vec2(0.6616787922684506, 0.8431932401454286),
-    vec2(0.013792616530536095, 0.07606840902247503),
-    vec2(0.5506476459339343, 0.5526037993849915),
-    vec2(0.19107659212621841, 0.6354946478787757),
-    vec2(0.08635995805355967, 0.2472202396255624),
-    vec2(0.1252250440433068, 0.08609885530246719),
-    vec2(0.5904742704843103, 0.030490538789994526),
-    vec2(0.10092023462217092, 0.28999319035930815),
-    vec2(0.5111282665879786, 0.5210547623000872),
-    vec2(0.41340214843009226, 0.4053946747614482),
-    vec2(0.7918845643409962, 0.5976228115068767),
-    vec2(0.581450087162451, 0.4589538001737091),
-    vec2(0.842207304152363, 0.2930246707112014),
-    vec2(0.8484321745810262, 0.6802420254928683),
-    vec2(0.05634620713888261, 0.33998908042767395),
-    vec2(0.4127325637806537, 0.03475081029893923),
-    vec2(0.7351358812117753, 0.4609277171243483),
-    vec2(0.7530362313643808, 0.07159967465392558),
-    vec2(0.2537496924765742, 0.4081893890964827),
-    vec2(0.8242599497999632, 0.3479496401290726),
-    vec2(0.02472941535834594, 0.08531173028951677),
-    vec2(0.14550073150566112, 0.00019923791476850194),
-    vec2(0.8701282290178975, 0.10619976176689505),
-    vec2(0.8301964700168487, 0.891685097229575),
-    vec2(0.0965915286907838, 0.14401801210186915),
-    vec2(0.739085379430238, 0.40751300048167005),
-    vec2(0.8189104667888195, 0.07553790493802559),
-    vec2(0.0819085928456772, 0.47462590600346855),
-    vec2(0.27586799506009396, 0.23212979598942174),
-    vec2(0.502863992002033, 0.07109038503647092),
-    vec2(0.8964918160764741, 0.8827850755057025), /*
-    vec2(-30, -30) / 64.0 + 1.0, vec2(-12, -22) / 64.0 + 1.0,
-    vec2(-24, -2) / 64.0 + 1.0,  vec2(-8, -16) / 64.0 + 1.0,
-    vec2(-26, -24) / 64.0 + 1.0, vec2(-14, -4) / 64.0 + 1.0,
-    vec2(-4, -28) / 64.0 + 1.0,  vec2(-26, -16) / 64.0 + 1.0,
-    vec2(-4, -2) / 64.0 + 1.0,   vec2(-24, -32) / 64.0 + 1.0,
-    vec2(-10, -10) / 64.0 + 1.0, vec2(-18, -18) / 64.0 + 1.0,
-    vec2(-12, -30) / 64.0 + 1.0, vec2(-32, -4) / 64.0 + 1.0,
-    vec2(-2, -20) / 64.0 + 1.0,  vec2(-22, -12) / 64.0 + 1.0,*/
-
+#define BLOCK_OFFSETS_COUNT 16
+const vec2 BLOCK_OFFSETS[BLOCK_OFFSETS_COUNT] = {
+    vec2(0.44488132549030435, 0.31563986695199087),
+    vec2(0.1148786159292483, 0.8548156864156085),
+    vec2(-0.002148183176659213, -0.6542196608276174),
+    vec2(-0.10773558199980471, -0.865014821847512),
+    vec2(-0.1452097231468079, -0.361160178632681),
+    vec2(-0.13079792159436576, 0.45205461311007844),
+    vec2(0.49412769555245295, -0.025080750942926278),
+    vec2(-0.8946359720290911, 0.3775707422982397),
+    vec2(0.6185343503380443, 0.8431189038845106),
+    vec2(-0.32354170620402933, -0.8860494747143273),
+    vec2(0.16326567660620794, -0.55978452888754),
+    vec2(0.3894441854425761, -0.42399912088548075),
+    vec2(-0.6321152784081832, -0.664452722309357),
+    vec2(0.3814582754823064, 0.8480884948253038),
+    vec2(0.6478505901925895, -0.17737063699748123),
+    vec2(0.08139039642641643, 0.9898172365586706),
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -302,14 +278,22 @@ void resolve(float R[M][M], float r_c[M], out float a[M]) {
     a[i] = 0.0;
   }
 
-  a[M - 1] = r_c[M - 1] / R[M - 1][M - 1];
+  if (R[M - 1][M - 1] != 0) {
+    a[M - 1] = r_c[M - 1] / R[M - 1][M - 1];
+  } else {
+    a[M - 1] = 0.0;
+  }
 
   for (int i = M - 2; i >= 0; i--) {
     float sum = 0.0;
     for (int j = i + 1; j < M; j++) {
       sum += R[i][j] * a[j];
     }
-    a[i] = (r_c[i] - sum) / R[i][i];
+    if (R[i][i] != 0) {
+      a[i] = (r_c[i] - sum) / R[i][i];
+    } else {
+      a[i] = 0.0;
+    }
   }
 }
 
@@ -323,9 +307,12 @@ float dot_m(float a[M], float b[M]) {
 
 void main() {
   ivec2 coord = ivec2(gl_GlobalInvocationID.xy) * BLOCK_SIZE;
-  coord +=
-      ivec2(RELATIVE_OFFSETS[(coord.x + uniforms.current_frame) % OFFSETS_COUNT] *
-            vec2(BLOCK_SIZE/2));
+
+  // vec2 offset =
+  //     RELATIVE_OFFSETS[uniforms.current_frame % OFFSETS_COUNT] - vec2(0.5);
+  // offset *= 16.0;
+  // offset *= vec2(BLOCK_SIZE);
+  coord += ivec2(BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT] * BLOCK_SIZE);
 
   if (coord.x > uniforms.target_dim.x || coord.y > uniforms.target_dim.y) {
     return;
@@ -357,10 +344,9 @@ void main() {
   }
 
   for (int i = 0; i < W; i++) {
-    ivec2 local_coord =
-        coord +
-        ivec2(RELATIVE_OFFSETS[(i + uniforms.current_frame) % OFFSETS_COUNT] *
-              vec2(BLOCK_SIZE));
+    int x = (i % S_W) * (BLOCK_SIZE / S_W);
+    int y = (i / S_W) * (BLOCK_SIZE / S_W);
+    ivec2 local_coord = coord + ivec2(x, y);
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
     vec4 alb = texelFetch(tex_albedo, local_coord, 0);
@@ -399,7 +385,7 @@ void main() {
       // } else {
       //   T_tilde[w][m] = (T_tilde[w][m] - min_values[m]);
       // }
-      if (m >= FEATURES_NOT_SCALED) {
+      if (m >= FEATURES_NOT_SCALED && mag_values[m] != 0.0) {
         T_tilde[w][m] /= mag_values[m];
       }
 
@@ -412,10 +398,9 @@ void main() {
   householder_qr(T_tilde, R_red_tilde);
 
   for (int w = 0; w < W; w++) {
-    ivec2 local_coord =
-        coord +
-        ivec2(RELATIVE_OFFSETS[(w + uniforms.current_frame) % OFFSETS_COUNT] *
-              vec2(BLOCK_SIZE));
+    int x = (w % S_W) * (BLOCK_SIZE / S_W);
+    int y = (w / S_W) * (BLOCK_SIZE / S_W);
+    ivec2 local_coord = coord + ivec2(x, y);
     T_tilde[w][M] = texelFetch(tex_indirect, local_coord, 0).y;
   }
 
@@ -423,10 +408,9 @@ void main() {
   householder_qr(T_tilde, R_green_tilde);
 
   for (int w = 0; w < W; w++) {
-    ivec2 local_coord =
-        coord +
-        ivec2(RELATIVE_OFFSETS[(w + uniforms.current_frame) % OFFSETS_COUNT] *
-              vec2(BLOCK_SIZE));
+    int x = (w % S_W) * (BLOCK_SIZE / S_W);
+    int y = (w / S_W) * (BLOCK_SIZE / S_W);
+    ivec2 local_coord = coord + ivec2(x, y);
     T_tilde[w][M] = texelFetch(tex_indirect, local_coord, 0).z;
   }
 
@@ -459,7 +443,7 @@ void main() {
   float alpha_blue[M];
   resolve(R, r_blue, alpha_blue);
 
-  if (coord.x == 20 * 32 && coord.y == 10 * 32) {
+  if (gl_GlobalInvocationID.x == 20 && gl_GlobalInvocationID.y == 10) {
     for (int w = 0; w < W; w++) {
       for (int m = 0; m < (M + 1); m++) {
         debug_tilde[w][m] = T_tilde[w][m];
@@ -472,9 +456,8 @@ void main() {
       }
     }
 
-    for (int m = 0; m < (M); m++) {
-      debug_alpha_red[m] = alpha_red[m];
-    }
+    debug_alpha_red[0] = coord.x;
+    debug_alpha_red[1] = coord.y;
   }
 
   // Output results
@@ -502,7 +485,9 @@ void main() {
       for (int m = FEATURES_NOT_SCALED; m < M; m++) {
         // features[m] =
         //     (features[m] - min_values[m]) / (max_values[m] - min_values[m]);
-        features[m] /= mag_values[m];
+        if (mag_values[m] != 0.0) {
+          features[m] /= mag_values[m];
+        }
       }
       float red = dot_m(alpha_red, features);
       if (red < 0.0) {
