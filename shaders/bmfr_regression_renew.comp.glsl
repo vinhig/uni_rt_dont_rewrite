@@ -1,32 +1,34 @@
 #version 430
 
+#pragma unroll 0
+
 #define BLOCK_SIZE 64
-#define W 16
-#define S_W 4
+#define W 25
+#define S_W 5
 #define M 4
-// 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z, POS_X², POS_Y², POS_Z²
+// 1, NORM_X, NORM_Y, NORM_Z
 #define NOISE_AMOUNT 0.01
 
 #define FEATURES_NOT_SCALED 4
 
 #define BLOCK_OFFSETS_COUNT 16
-const vec2 BLOCK_OFFSETS[BLOCK_OFFSETS_COUNT] = {
-    vec2(0.44488132549030435, 0.31563986695199087),
-    vec2(0.1148786159292483, 0.8548156864156085),
-    vec2(-0.002148183176659213, -0.6542196608276174),
-    vec2(-0.10773558199980471, -0.865014821847512),
-    vec2(-0.1452097231468079, -0.361160178632681),
-    vec2(-0.13079792159436576, 0.45205461311007844),
-    vec2(0.49412769555245295, -0.025080750942926278),
-    vec2(-0.8946359720290911, 0.3775707422982397),
-    vec2(0.6185343503380443, 0.8431189038845106),
-    vec2(-0.32354170620402933, -0.8860494747143273),
-    vec2(0.16326567660620794, -0.55978452888754),
-    vec2(0.3894441854425761, -0.42399912088548075),
-    vec2(-0.6321152784081832, -0.664452722309357),
-    vec2(0.3814582754823064, 0.8480884948253038),
-    vec2(0.6478505901925895, -0.17737063699748123),
-    vec2(0.08139039642641643, 0.9898172365586706),
+const ivec2 BLOCK_OFFSETS[BLOCK_OFFSETS_COUNT] = {
+	ivec2(-30, -30),
+	ivec2(-12, -22),
+	ivec2(-24, -2),
+	ivec2(-8, -16),
+	ivec2(-26, -24),
+	ivec2(-14, -4),
+	ivec2(-4, -28),
+	ivec2(-26, -16),
+	ivec2(-4, -2),
+	ivec2(-24, -32),
+	ivec2(-10, -10),
+	ivec2(-18, -18),
+	ivec2(-12, -30),
+	ivec2(-32, -4),
+	ivec2(-2, -20),
+	ivec2(-22, -12),
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -90,7 +92,10 @@ layout(std430, binding = 7) buffer tmp_out_tilde {
   float T_tmp_out_tilde[][W][M + 1];
 };
 
-shared float H_temp[W][W];
+layout(std430, binding = 8) buffer tmp_h {
+  //
+  float H_tmp[][W][W];
+};
 
 shared float alpha_red[M];
 shared float alpha_green[M];
@@ -99,6 +104,9 @@ shared float alpha_blue[M];
 shared float max_values[M];
 shared float min_values[M];
 shared float mag_values[M];
+
+shared float alpha[W];
+shared float v[W];
 
 float random(uint a) {
   a = (a + uint(2127912214u)) + (a << uint(12));
@@ -117,16 +125,30 @@ float add_random(int x, int y, int feature_buffer) {
           0.5);
 }
 
-float norm_k(float vec[W], int k) {
-  float sum = 0.0;
+void householder_step(int index_buff, int k) {
+  // Compute the reflection of the k column
+
   for (int i = 0; i < W - k; i++) {
-    sum += vec[i] * vec[i];
+    alpha[i] = T_tmp_in_tilde[index_buff][i + k][k];
   }
 
-  return sqrt(sum);
-}
+  float sign_a0 = sign(alpha[0]);
+  float norm_a = 0.0;
+  for (int i = 0; i < W - k; i++) {
+    norm_a += alpha[i] * alpha[i];
+  }
+  norm_a = sqrt(norm_a);
 
-void householder_matrix(out float H[W][W], float v[W], int k) {
+  for (int i = 0; i < W; i++) {
+    v[i] = 0.0;
+  }
+
+  v[0] = sign_a0 * norm_a + alpha[0];
+  for (int i = 1; i < W; i++) {
+    v[i] = v[i] + alpha[i];
+  }
+
+  // Compute the corresponding householder matrix
   float uut;
   for (int i = 0; i < W - k; i++) {
     uut += v[i] * v[i];
@@ -136,115 +158,92 @@ void householder_matrix(out float H[W][W], float v[W], int k) {
     for (int y = 0; y < W; y++) {
       if (x < k || y < k) {
         if (x == y) {
-          H[x][y] = 1.0;
+          H_tmp[index_buff][x][y] = 1.0;
         } else {
-          H[x][y] = 0.0;
+          H_tmp[index_buff][x][y] = 0.0;
         }
       } else {
         if (x == y) {
-          H[x][y] = 1.0 - v[x - k] * v[y - k] / uut * 2;
+          H_tmp[index_buff][x][y] = 1.0 - v[x - k] * v[y - k] / uut * 2;
         } else {
-          H[x][y] = 0.0 - v[x - k] * v[y - k] / uut * 2;
+          H_tmp[index_buff][x][y] = 0.0 - v[x - k] * v[y - k] / uut * 2;
         }
       }
     }
   }
 }
 
-void householder_step(float T_tilde[W][M + 1], out float H[W][W], int k) {
-  // Compute the reflection of the k column
-  float alpha[W];
-
-  for (int i = 0; i < W - k; i++) {
-    alpha[i] = T_tilde[i + k][k];
-  }
-
-  float sign_a0 = sign(alpha[0]);
-  float norm_a = norm_k(alpha, k);
-
-  float v[W];
-  v[0] = sign_a0 * norm_a + alpha[0];
-  for (int i = 1; i < W; i++) {
-    v[i] = v[i] + alpha[i];
-  }
-
-  // Compute the corresponding householder matrix
-  float h[W][W];
-
-  householder_matrix(h, v, k);
-
-  for (int w = 0; w < W; w++) {
-    for (int m = 0; m < W; m++) {
-      H[w][m] = h[w][m];
+void mul_mat_H(int index_buff) {
+  for (int i = 0; i < W; i++) {
+    for (int j = 0; j < M + 1; j++) {
+      T_tmp_out_tilde[index_buff][i][j] = 0.0;
     }
   }
-}
-
-void mul_mat_H(float H[W][W], float A[W][M + 1], out float R[W][M + 1]) {
   for (int i = 0; i < W; i++) {
     for (int j = 0; j < M + 1; j++) {
       for (int l = 0; l < W; l++) {
-        R[i][j] += H[i][l] * A[l][j];
+        T_tmp_out_tilde[index_buff][i][j] +=
+            H_tmp[index_buff][i][l] * T_tmp_in_tilde[index_buff][l][j];
       }
     }
   }
 }
 
 void householder_qr(int index_buff, int channel) {
-  float H[W][W];
+  T_tmp_in_tilde[index_buff] = T_tilde[index_buff];
 
-  householder_step(T_tilde[index_buff], H, 0);
-  mul_mat_H(H, T_tilde[index_buff], T_tmp_out_tilde[index_buff]);
-
-  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
-
-  householder_step(T_tmp_in_tilde[index_buff], H, 1);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 0);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 2);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 1);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 3);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 2);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 4);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 3);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 5);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 4);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 6);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 5);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 7);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 6);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 8);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 7);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 9);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 8);
+  mul_mat_H(index_buff);
 
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  householder_step(T_tmp_in_tilde[index_buff], H, 10);
-  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
+  householder_step(index_buff, 9);
+  mul_mat_H(index_buff);
+
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
+
+  householder_step(index_buff, 10);
+  mul_mat_H(index_buff);
 
   if (channel == 0) {
     for (int w = 0; w < W; w++) {
@@ -312,8 +311,7 @@ void main() {
   //     RELATIVE_OFFSETS[uniforms.current_frame % OFFSETS_COUNT] - vec2(0.5);
   // offset *= 16.0;
   // offset *= vec2(BLOCK_SIZE);
-  coord += ivec2(BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT] *
-                 BLOCK_SIZE);
+  coord += BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT];
 
   if (coord.x > uniforms.target_dim.x || coord.y > uniforms.target_dim.y) {
     return;
@@ -342,18 +340,29 @@ void main() {
     int x = (i % S_W) * (BLOCK_SIZE / S_W);
     int y = (i / S_W) * (BLOCK_SIZE / S_W);
     ivec2 local_coord = coord + ivec2(x, y);
+
+    if (local_coord.x >= uniforms.target_dim.x) {
+      local_coord.x =
+          int(uniforms.target_dim.x - (local_coord.x - uniforms.target_dim.x));
+    }
+
+    if (local_coord.y >= uniforms.target_dim.y) {
+      local_coord.y =
+          int(uniforms.target_dim.y - (local_coord.y - uniforms.target_dim.y));
+    }
+
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
     vec4 alb = texelFetch(tex_albedo, local_coord, 0);
     T_tilde[index_buff][i][1] = norm.x;
     T_tilde[index_buff][i][2] = norm.y;
     T_tilde[index_buff][i][3] = norm.z;
-    // T_tilde[i][4] = pos.x;
-    // T_tilde[i][5] = pos.y;
-    // T_tilde[i][6] = pos.z;
-    // T_tilde[i][7] = pos.x * pos.x;
-    // T_tilde[i][8] = pos.y * pos.y;
-    // T_tilde[i][9] = pos.z * pos.z;
+    // T_tilde[index_buff][i][4] = pos.x;
+    // T_tilde[index_buff][i][5] = pos.y;
+    // T_tilde[index_buff][i][6] = pos.z;
+    // T_tilde[index_buff][i][7] = pos.x * pos.x;
+    // T_tilde[index_buff][i][8] = pos.y * pos.y;
+    // T_tilde[index_buff][i][9] = pos.z * pos.z;
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
     T_tilde[index_buff][i][4] = noisy.y;

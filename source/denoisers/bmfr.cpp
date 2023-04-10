@@ -6,7 +6,7 @@
 #include <iostream>
 #include <sstream>
 
-#define W 16
+#define W 64
 #define M 4
 #define BLOCK_SIZE 64
 
@@ -149,7 +149,7 @@ BmfrDenoiser::BmfrDenoiser() {
   glGenBuffers(1, &h_tmp);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, h_tmp);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
-               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+               sizeof(float) * W * (W) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
                &h_tmp, GL_DYNAMIC_DRAW);
 
@@ -206,6 +206,7 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, r);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, tmp_in_tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, tmp_out_tilde);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, h_tmp);
   // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, h_tmp);
   // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, a_tmp);
 
