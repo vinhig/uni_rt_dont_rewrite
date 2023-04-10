@@ -39,6 +39,8 @@ public:
 
   GLuint tilde;
   GLuint r;
+  GLuint tmp_in_tilde;
+  GLuint tmp_out_tilde;
   GLuint h_tmp;
   GLuint a_tmp;
 

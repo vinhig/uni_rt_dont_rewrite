@@ -160,6 +160,20 @@ BmfrDenoiser::BmfrDenoiser() {
                    (1280 / BLOCK_SIZE),
                &a_tmp, GL_DYNAMIC_DRAW);
 
+  glGenBuffers(1, &tmp_in_tilde);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_in_tilde);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &tmp_in_tilde, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &tmp_out_tilde);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_out_tilde);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               &tmp_out_tilde, GL_DYNAMIC_DRAW);
+
   printf("hello from bmfr denoiser\n");
 }
 
@@ -190,8 +204,10 @@ GLuint BmfrDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, blue_tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, r);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, h_tmp);
-  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, a_tmp);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, tmp_in_tilde);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, tmp_out_tilde);
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, h_tmp);
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, a_tmp);
 
   // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, tmp_buffer_H);
   // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, tmp_buffer_R);

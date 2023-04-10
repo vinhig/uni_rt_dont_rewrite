@@ -80,6 +80,16 @@ layout(std430, binding = 5) buffer r {
   float R[][W][M + 1];
 };
 
+layout(std430, binding = 6) buffer tmp_in_tilde {
+  //
+  float T_tmp_in_tilde[][W][M + 1];
+};
+
+layout(std430, binding = 7) buffer tmp_out_tilde {
+  //
+  float T_tmp_out_tilde[][W][M + 1];
+};
+
 shared float H_temp[W][W];
 
 shared float alpha_red[M];
@@ -224,76 +234,76 @@ void mul_mat_H(float H[W][W], float A[W][M + 1], out float R[W][M + 1]) {
 
 void householder_qr(int index_buff, int channel) {
   float H[W][W];
-  float A[W][M + 1];
-  float Atmp[W][M + 1];
 
   householder_step(T_tilde[index_buff], H, 0);
-  mul_mat_H(H, T_tilde[index_buff], A);
+  mul_mat_H(H, T_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 1);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 1);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 2);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 2);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 3);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 3);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 4);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 4);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 5);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 5);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 6);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 6);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 7);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 7);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 8);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 8);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 9);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
-  A = Atmp;
+  householder_step(T_tmp_in_tilde[index_buff], H, 9);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
-  householder_step(A, H, 10);
-  mul_mat_H(H, A, Atmp);
+  T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
+
+  householder_step(T_tmp_in_tilde[index_buff], H, 10);
+  mul_mat_H(H, T_tmp_in_tilde[index_buff], T_tmp_out_tilde[index_buff]);
 
   if (channel == 0) {
     for (int w = 0; w < W; w++) {
       for (int m = 0; m < M + 1; m++) {
-        R_red_tilde[index_buff][w][m] = A[w][m];
+        R_red_tilde[index_buff][w][m] = T_tmp_out_tilde[index_buff][w][m];
       }
     }
   } else if (channel == 1) {
     for (int w = 0; w < W; w++) {
       for (int m = 0; m < M + 1; m++) {
-        R_green_tilde[index_buff][w][m] = A[w][m];
+        R_green_tilde[index_buff][w][m] = T_tmp_out_tilde[index_buff][w][m];
       }
     }
   } else if (channel == 2) {
     for (int w = 0; w < W; w++) {
       for (int m = 0; m < M + 1; m++) {
-        R_blue_tilde[index_buff][w][m] = A[w][m];
+        R_blue_tilde[index_buff][w][m] = T_tmp_out_tilde[index_buff][w][m];
       }
     }
   }
