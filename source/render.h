@@ -33,8 +33,8 @@ public:
     float angle;
     float speed{1.0f};
 
-    float near{0.1f};
-    float far{300.0f};
+    float near{0.01f};
+    float far{100.0f};
 
     float distance;
 
@@ -114,11 +114,12 @@ private:
     float target_dim[2]{1280.0f, 720.0f};
     float alpha_illum{0.05f};
     float alpha_moments{0.05f};
-    float phi_depth{0.2};
+    float phi_depth{0.45};
     float phi_normal{0.3f};
     float depth_tolerance{0.75};
     float normal_tolerance{0.75};
     float min_accum_weight{0.15};
+    float gradient_cap{1.0};
     int frame_number;
   };
   ReprojectionCB reprojection = {};

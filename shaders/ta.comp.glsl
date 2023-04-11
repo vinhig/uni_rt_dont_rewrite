@@ -50,6 +50,7 @@ layout(binding = 0, std140) uniform Reprojection {
   float depth_tolerance;
   float normal_tolerance;
   float min_accum_weight;
+  float gradient_cap;
   uint frame_number;
 }
 uniforms;
@@ -251,7 +252,8 @@ void main() {
       accumulate(prev_color, curr_color, prev_moments, curr_moments,
                  curr_coord);
     } else {
-      imageStore(t_out_accumulated, curr_coord, vec4(curr_color, 0.0));
+      imageStore(t_out_accumulated, curr_coord,
+                 texelFetch(t_curr_indirect, curr_coord, 0));
       imageStore(t_out_moments, curr_coord, vec4(curr_moments, 0.0, 0.0));
       imageStore(t_out_history_length, curr_coord, uvec4(0));
     }

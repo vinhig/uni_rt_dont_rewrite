@@ -26,6 +26,7 @@ layout(binding = 0, std140) uniform Reprojection {
   float depth_tolerance;
   float normal_tolerance;
   float min_accum_weight;
+  float gradient_cap;
   uint frame_number;
 }
 uniforms;
@@ -38,6 +39,10 @@ float get_gradient(float l_curr, float l_prev) {
 
   float ret = abs(l_curr - l_prev) / l_max;
   ret *= ret; // make small changes less significant
+
+  if (ret <= uniforms.gradient_cap) {
+    ret = 0.0;
+  }
 
   return ret;
 }

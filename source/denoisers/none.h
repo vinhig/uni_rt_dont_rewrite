@@ -5,8 +5,10 @@
 
 namespace UniRt::Denoiser {
 struct NoneDenoiser : Denoiser {
+  private:
+  GLuint reprojection_program;
 public:
-  NoneDenoiser() { printf("hello from none denoiser\n"); };
+  NoneDenoiser();
 
   ~NoneDenoiser() = default;
 
@@ -18,6 +20,6 @@ public:
 
   bool NeedPostTemporalAccumulation() override { return false; }
 
-  void ReprojectSeed(BunchOfTexture &textures, int current_frame) override{};
+  void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 };
 } // namespace UniRt::Denoiser

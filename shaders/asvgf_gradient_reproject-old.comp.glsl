@@ -59,6 +59,7 @@ layout(binding = 0, std140) uniform Reprojection {
   float depth_tolerance;
   float normal_tolerance;
   float min_accum_weight;
+  float gradient_cap;
   uint frame_number;
 }
 uniforms;
@@ -219,8 +220,6 @@ void main() {
   vec4 found_prev_lum = vec4(0.0, 0.0, 0.0, 1.0);
   uint found_prev_rng = uint(0);
 
-  // Here is the implementation of Q2RTX which is picking the sample with the
-  // highest luminance ...
   for (int offy = 0; offy < GRAD_DWN; offy++) {
     for (int offx = 0; offx < GRAD_DWN; offx++) {
       ivec2 p = local_pos * GRAD_DWN + ivec2(offx, offy);

@@ -29,8 +29,10 @@ add_executable(uni_rt_dont_rewrite
     source/scene.cpp
     source/util.cpp
     source/embree_utils.cpp
-    
+
+    source/denoisers/none.cpp
     source/denoisers/bmfr.cpp
+    source/denoisers/bmfr_renew.cpp
     source/denoisers/a-svgf.cpp
     source/denoisers/oidn.cpp
     source/denoisers/accumulator.cpp

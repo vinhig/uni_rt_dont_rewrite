@@ -24,6 +24,7 @@
 #include "denoisers/a-svgf.h"
 #include "denoisers/accumulator.h"
 #include "denoisers/bmfr.h"
+#include "denoisers/bmfr_renew.h"
 #include "denoisers/none.h"
 #include "denoisers/oidn.h"
 
@@ -205,10 +206,10 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.angle = glm::radians(30.0f);
+  camera.angle = 45.0f;
   camera.speed = 0.0f;
-  camera.distance = 24.0f;
-  camera.center = glm::vec3(0.0f, 4.0f, 0.0f);
+  camera.distance = 10.0f;
+  camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   int yo = 0;
   glGetIntegerv(GL_MAX_LABEL_LENGTH, &yo);
@@ -356,7 +357,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::BmfrDenoiser();
+  current_denoiser = new Denoiser::ASvgfDenoiser();
 
   glObjectLabel(GL_TEXTURE, position_texture[0], -1, "position_texture[0]");
   glObjectLabel(GL_TEXTURE, position_texture[1], -1, "position_texture[1]");
@@ -683,11 +684,12 @@ void Render::DrawGUI() {
 
   // a list of options in imgui containing "bmfr", "none", "optix"
   static char *denoisers[] = {
-      "bmfr", "a-svgf", "oidn", "none", "accum",
+      "bmfr", "bmfr_renew", "a-svgf", "oidn", "none", "accum",
   };
   static int chosen = 0;
 
-  if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 4) || (current_frame == 15 && chosen != 4)) {
+  if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 4) ||
+      (current_frame == 15 && chosen != 4)) {
     float *data = new float[1280 * 720 * 4];
     glBindTexture(GL_TEXTURE_2D,
                   accumulated_denoised_texture[current_frame % 2]);
@@ -728,6 +730,9 @@ void Render::DrawGUI() {
 
     ImGui::SliderFloat("Repro.min_accum_weight", &reprojection.min_accum_weight,
                        0.01f, 0.9f);
+
+    ImGui::SliderFloat("Gradient.gradient_cap", &reprojection.gradient_cap,
+                       0.01f, 0.9f);
   }
 
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
@@ -743,20 +748,25 @@ void Render::DrawGUI() {
           }
           case 1: {
             delete current_denoiser;
-            current_denoiser = new Denoiser::ASvgfDenoiser();
+            current_denoiser = new Denoiser::BmfrRenewDenoiser();
             break;
           }
           case 2: {
             delete current_denoiser;
-            current_denoiser = new Denoiser::OidnDenoiser();
+            current_denoiser = new Denoiser::ASvgfDenoiser();
             break;
           }
           case 3: {
             delete current_denoiser;
-            current_denoiser = new Denoiser::NoneDenoiser();
+            current_denoiser = new Denoiser::OidnDenoiser();
             break;
           }
           case 4: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::NoneDenoiser();
+            break;
+          }
+          case 5: {
             delete current_denoiser;
             current_denoiser = new Denoiser::AccumulatorDenoiser();
             break;
@@ -977,11 +987,12 @@ bool Render::Update() {
   if (current_denoiser->NeedPostTemporalAccumulation()) {
     TemporalAccumulationDenoised();
   } else {
-    glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0, 0,
-                       0, 0, accumulated_denoised_texture[current_frame % 2],
-                       GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
+    // glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0,
+    // 0,
+    //                    0, 0, accumulated_denoised_texture[current_frame % 2],
+    //                    GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
 
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    // glMemoryBarrier(GL_ALL_BARRIER_BITS);
   }
 
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -991,7 +1002,7 @@ bool Render::Update() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(quad_program);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, accumulated_denoised_texture[current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, denoised_texture[current_frame % 2]);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -1055,9 +1066,8 @@ void Render::TemporalAccumulationNoisy() {
   glBindImageTexture(8, noisy_accumulation.moment_texture[current_frame % 2], 0,
                      0, 0, GL_READ_WRITE, GL_RG16F);
 
-  // t_out_history_length
-  glBindImageTexture(9, noisy_accumulation.history_length[current_frame % 2], 0,
-                     0, 0, GL_READ_WRITE, GL_R8UI);
+  glBindImageTexture(9, noisy_accumulation.history_length[0], 0, 0, 0,
+                     GL_READ_WRITE, GL_R8UI);
 
   // t_curr_depth
   glActiveTexture(GL_TEXTURE11);

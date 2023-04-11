@@ -92,6 +92,7 @@ layout(binding = 0, std140) uniform Reprojection {
   float depth_tolerance;
   float normal_tolerance;
   float min_accum_weight;
+  float gradient_cap;
   uint frame_number;
 }
 uniforms;
