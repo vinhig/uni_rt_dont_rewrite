@@ -3,8 +3,8 @@
 #pragma unroll 0
 
 #define BLOCK_SIZE 64
-#define W 25
-#define S_W 5
+#define W 36
+#define S_W 6
 #define M 4
 // 1, NORM_X, NORM_Y, NORM_Z
 #define NOISE_AMOUNT 0.01
@@ -215,7 +215,7 @@ void householder_qr(int index_buff, int channel) {
 
   householder_step(index_buff, 4);
   mul_mat_H(index_buff);
-
+/*
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
   householder_step(index_buff, 5);
@@ -245,6 +245,7 @@ void householder_qr(int index_buff, int channel) {
 
   householder_step(index_buff, 10);
   mul_mat_H(index_buff);
+  */
 
   if (channel == 0) {
     for (int w = 0; w < W; w++) {
@@ -312,7 +313,7 @@ void main() {
   //     RELATIVE_OFFSETS[uniforms.current_frame % OFFSETS_COUNT] - vec2(0.5);
   // offset *= 16.0;
   // offset *= vec2(BLOCK_SIZE);
-  coord += BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT];
+  // coord += BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT] * 2;
 
   if (coord.x > uniforms.target_dim.x || coord.y > uniforms.target_dim.y) {
     return;

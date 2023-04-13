@@ -315,6 +315,9 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D,
                   reprojected_luminance_texture[current_frame % 2]);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D,
+                  textures.visibility_texture[current_frame % 2]);
 
     glBindImageTexture(2, gradient_ping_texture, 0, 0, 0, GL_READ_WRITE,
                        GL_RGBA32F);

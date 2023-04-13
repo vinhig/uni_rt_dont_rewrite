@@ -13,7 +13,7 @@
 
 #define GRAD_DWN (3)
 #define GROUP_SIZE_GRAD 8
-#define GROUP_SIZE_PIXELS (GROUP_SIZE_GRAD * GRAD_DWN)
+#define GROUP_SIZE_PIXELS (GROUP_SIZE_GRAD * (GRAD_DWN))
 #define BLUE_NOISE_RES (256)
 #define NUM_BLUE_NOISE_TEX (128)
 #define RNG_SEED_SHIFT_X 0u
@@ -199,33 +199,57 @@ void main() {
   ivec2 pos_grad = ivec2(gl_WorkGroupID) * GROUP_SIZE_GRAD + local_pos;
   curr_coord = pos_grad * GRAD_DWN;
 
-  bool found = false;
-  ivec2 found_offset = ivec2(0);
-  ivec2 found_pos_prev = ivec2(0);
-  float found_prev_lum = -1.0;
+  float sum_lum = 0.0;
+  float count_lum = 0.0;
 
-  // TODO: choose the sample closest to the mean of the 9 samples
+  // TODO:  of the 9 samples
   for (int offy = 0; offy < GRAD_DWN; offy++) {
     for (int offx = 0; offx < GRAD_DWN; offx++) {
       ivec2 p = local_pos * GRAD_DWN + ivec2(offx, offy);
 
       vec4 prev_lum = reprojected_lum[p.y][p.x];
 
-      if (prev_lum.z > found_prev_lum) {
-        found_prev_lum = prev_lum.z;
-        found_offset = ivec2(offx, offy);
-        found_pos_prev = ivec2(prev_lum.xy);
-        found = true;
+      if (prev_lum.x != 0 && prev_lum.y != 0) {
+        sum_lum += prev_lum.z;
+        count_lum += 1.0;
       }
     }
   }
 
-  if (!found) {
-    imageStore(t_out_reprojected, pos_grad, vec4(0.0));
+  if (count_lum != 0) {
+    sum_lum /= count_lum;
+  } else {
+    sum_lum = 1.0;
+  }
+
+  // Choose the sample closest to the average
+  float diff = 10.0;
+  ivec2 rep_coord = ivec2(0);
+  ivec2 offset = ivec2(0);
+  bool found = false;
+  for (int offy = 0; offy < GRAD_DWN; offy++) {
+    for (int offx = 0; offx < GRAD_DWN; offx++) {
+      ivec2 p = local_pos * GRAD_DWN + ivec2(offx, offy);
+
+      vec4 prev_lum = reprojected_lum[p.y][p.x];
+
+      if (prev_lum.x != 0 && prev_lum.y != 0) {
+        if (diff > abs(prev_lum.z - sum_lum)) {
+          rep_coord = ivec2(prev_lum.xy);
+          found = true;
+          diff = abs(prev_lum.z - sum_lum);
+          offset = ivec2(offx, offy);
+        }
+      }
+    }
+  }
+
+  if (count_lum == 0) {
+    imageStore(t_out_reprojected, pos_grad, vec4(sum_lum));
     return;
   }
 
-  imageStore(t_out_reprojected, pos_grad, vec4(found_prev_lum));
-  imageStore(t_out_rng_seed, curr_coord + found_offset,
-             uvec4(generate_rng_seed(curr_coord)));
+  imageStore(t_out_reprojected, pos_grad, vec4(sum_lum));
+  // imageStore(t_out_rng_seed, curr_coord + offset,
+  //            uvec4(texelFetch(t_prev_rng_seed, curr_coord + offset, 0)));
 }

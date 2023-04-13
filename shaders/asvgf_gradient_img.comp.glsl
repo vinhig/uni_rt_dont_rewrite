@@ -8,6 +8,8 @@ layout(binding = 1) uniform sampler2D t_prev_luminance;
 
 layout(binding = 2, rgba32f) uniform restrict image2D t_out_gradient;
 
+layout(binding = 3) uniform isampler2D t_curr_instance;
+
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 #define GRAD_DWN 3
@@ -40,8 +42,8 @@ float get_gradient(float l_curr, float l_prev) {
   float ret = abs(l_curr - l_prev) / l_max;
   ret *= ret; // make small changes less significant
 
-  if (ret <= uniforms.gradient_cap) {
-    ret = 0.0;
+  if (ret > uniforms.gradient_cap) {
+    ret = uniforms.gradient_cap;
   }
 
   return ret;
@@ -56,22 +58,35 @@ void main() {
     return;
   }
 
-  float curr_luminance = 0.0;
+  int curr_instance = texelFetch(t_curr_instance, ipos * 3, 0).r;
 
-  for (int offy = 0; offy < GRAD_DWN; offy++) {
-    for (int offx = 0; offx < GRAD_DWN; offx++) {
+  float sum_lum = 0.0;
+  float count_lum = 0.0;
+
+  for (int offy = 0; offy < GRAD_DWN+2; offy++) {
+    for (int offx = 0; offx < GRAD_DWN+2; offx++) {
       float new_lum = luminance(
           texelFetch(t_curr_sample, ipos * 3 + ivec2(offx, offy), 0).rgb);
 
-      if (new_lum > curr_luminance) {
-        curr_luminance = new_lum;
+      float instance =
+          texelFetch(t_curr_instance, ipos * 3 + ivec2(offx, offy), 0).r;
+
+      if (instance == curr_instance) {
+        sum_lum += new_lum;
+        count_lum += 1;
       }
     }
   }
 
+  if (count_lum != 0) {
+    sum_lum /= count_lum;
+  } else {
+    sum_lum = 0.0;
+  }
+
   float prev_luminance = texelFetch(t_prev_luminance, ipos, 0).b;
 
-  float gradient = get_gradient(curr_luminance, prev_luminance);
+  float gradient = get_gradient(sum_lum, prev_luminance);
 
   imageStore(t_out_gradient, ipos, vec4(gradient));
 }

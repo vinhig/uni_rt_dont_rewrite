@@ -208,7 +208,7 @@ Render::Render() {
 
   camera.angle = 45.0f;
   camera.speed = 0.0f;
-  camera.distance = 10.0f;
+  camera.distance = 15.0f;
   camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   int yo = 0;
@@ -357,7 +357,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::ASvgfDenoiser();
+  current_denoiser = new Denoiser::BmfrRenewDenoiser();
 
   glObjectLabel(GL_TEXTURE, position_texture[0], -1, "position_texture[0]");
   glObjectLabel(GL_TEXTURE, position_texture[1], -1, "position_texture[1]");
@@ -732,7 +732,7 @@ void Render::DrawGUI() {
                        0.01f, 0.9f);
 
     ImGui::SliderFloat("Gradient.gradient_cap", &reprojection.gradient_cap,
-                       0.01f, 0.9f);
+                       0.0f, 1.0f);
   }
 
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
@@ -987,12 +987,12 @@ bool Render::Update() {
   if (current_denoiser->NeedPostTemporalAccumulation()) {
     TemporalAccumulationDenoised();
   } else {
-    // glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0,
-    // 0,
-    //                    0, 0, accumulated_denoised_texture[current_frame % 2],
-    //                    GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
+    glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0,
+    0,
+                       0, 0, accumulated_denoised_texture[current_frame % 2],
+                       GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
 
-    // glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
   }
 
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -1002,7 +1002,7 @@ bool Render::Update() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(quad_program);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, denoised_texture[current_frame % 2]);
+  glBindTexture(GL_TEXTURE_2D, accumulated_denoised_texture[current_frame % 2]);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
