@@ -223,7 +223,7 @@ Render::Render() {
 
   camera.angle = 0.0f;
   camera.speed = 0.0f;
-  camera.distance = 1.0f;
+  camera.distance = 9.0f;
   camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   int yo = 0;
@@ -936,19 +936,17 @@ void Render::DrawEmbree() {
 bool Render::Update() {
 
   if (demo_mode) {
-    camera.speed = 14.0;
+    camera.speed = 19.0;
     // camera.
     // camera.distance = cosf(glm::radians((float)current_frame));
     // camera.center.z += 0.02;
-    // if (chosen == 5 && (current_frame % 256) == 0) {
+    // if ((current_frame % 256) == 0) {
     //   camera.Update(16 / 1000.0);
     //   float black[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     //   glClearTexImage(denoised_texture[current_frame % 2], 0, GL_RGBA, GL_FLOAT,
     //                   &black[0]);
     //   glClearTexImage(denoised_texture[1 - current_frame % 2], 0, GL_RGBA,
     //                   GL_FLOAT, &black[0]);
-    // } else {
-
     // }
     camera.Update(16 / 1000.0);
   } else {
@@ -1258,16 +1256,16 @@ void Render::Screenshot(char *denoised_path, char *noisy_path) {
       fclose(f);
     }
   }
-  {
-    FILE *f = fopen(noisy_path, "wb");
+  // {
+  //   FILE *f = fopen(noisy_path, "wb");
 
-    if (!f) {
-      printf("Couldn't save screenshot to %s...\n", noisy_path);
-    } else {
-      fwrite(noisy, 1280 * 720 * 4 * sizeof(float), 1, f);
-      fclose(f);
-    }
-  }
+  //   if (!f) {
+  //     printf("Couldn't save screenshot to %s...\n", noisy_path);
+  //   } else {
+  //     fwrite(noisy, 1280 * 720 * 4 * sizeof(float), 1, f);
+  //     fclose(f);
+  //   }
+  // }
 
   delete denoised;
   delete noisy;
