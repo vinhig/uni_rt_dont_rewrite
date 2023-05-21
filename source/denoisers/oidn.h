@@ -12,7 +12,7 @@ public:
 
   ~OidnDenoiser() = default;
 
-  bool NeedPreTemporalAccumulation() override { return true; }
+  bool NeedPreTemporalAccumulation() override { return false; }
 
   GLuint Denoise(BunchOfTexture &textures, int current_frame) override;
 

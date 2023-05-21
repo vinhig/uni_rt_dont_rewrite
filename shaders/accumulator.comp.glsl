@@ -25,6 +25,8 @@ layout(binding = 0, std140) uniform Reprojection {
 }
 uniforms;
 
+uniform float offset;
+
 float luminance(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
 
 void main() {
@@ -36,7 +38,7 @@ void main() {
     new = normalize(new) * 10.0;
   }
 
-  float n = uniforms.frame_number;
+  float n = uniforms.frame_number - offset;
   vec4 old = imageLoad(accum_data, coord);
   vec4 accum = (new + n *old) / (n + 1);
 

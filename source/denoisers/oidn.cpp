@@ -81,12 +81,12 @@ GLuint OidnDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   filter.setImage("normal", normal_buffer, oidn::Format::Float3, 1280, 720);
   filter.setImage("albedo", albedo_buffer, oidn::Format::Float3, 1280, 720);
   filter.setImage("output", output_buffer, oidn::Format::Float3, 1280, 720);
-  filter.set("hdr", true);
+  filter.set("hdr", false);
 
   filter.commit();
   filter.execute();
 
-  const char* error_message;
+  const char *error_message;
   if (device.getError(error_message) != oidn::Error::None) {
     printf("Error with oidn: %s\n", error_message);
   }

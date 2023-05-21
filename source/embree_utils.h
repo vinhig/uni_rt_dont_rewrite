@@ -156,6 +156,7 @@ struct Tile {
     float *albedo; // output by embree
     float *shadow; // output by embree
     float *position; // input by opengl
+    float *depth; // input by opengl
     float *normal; // input by opengl
 
     uint32_t *curr_rng_seed;

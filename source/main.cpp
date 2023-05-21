@@ -7,10 +7,10 @@ int main() {
 
   auto render = new UniRt::Render();
 
-  auto scene = new UniRt::Scene("/home/vincent/Documents/dragon.glb");
+  auto scene = new UniRt::Scene("/home/vincent/Projects/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf");
 
-  // render->SetScene(scene, "/home/vincent/Documents/cute_map.glb");
-  render->SetScene(scene, "/home/vincent/Documents/dragon.glb");
+  render->SetScene(scene, "sponza");
+  render->demo_mode = true;
 
   while (!render->Update()) {
   }

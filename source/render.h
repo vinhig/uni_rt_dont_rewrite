@@ -29,6 +29,8 @@ public:
 
   void SetScene(UniRt::Scene *scene, std::string scene_name);
 
+  bool demo_mode;
+
   struct RotatingCamera {
     float angle;
     float speed{1.0f};
@@ -46,9 +48,10 @@ public:
     glm::vec3 center;
 
     void Update(double delta) {
-      offset.x = cos(angle) * distance;
+
+      offset.x = cos(glm::radians(angle)) * distance;
       offset.y = distance / 3.0 * 2.0;
-      offset.z = sin(angle) * distance;
+      offset.z = sin(glm::radians(angle)) * distance;
 
       angle += delta * speed;
 
@@ -77,6 +80,7 @@ private:
   std::vector<std::vector<float>> tiles_shadow;
   std::vector<std::vector<float>> tiles_albedo;
   std::vector<float> position_texture_pixels;
+  std::vector<float> depth_texture_pixels;
   std::vector<float> normal_texture_pixels;
   std::vector<uint32_t> rng_seed_texture_pixels[2];
 
@@ -92,6 +96,9 @@ private:
   GLuint depth_texture[2];
   GLuint motion_texture[2];
   GLuint rng_seed_texture[2];
+
+  GLuint start_time_query;
+  GLuint stop_time_query;
 
   GLuint quad_program;
   GLuint features_program;
@@ -194,5 +201,7 @@ private:
 
   // Probably only used after BMFR execution
   void TemporalAccumulationDenoised();
+
+  void Screenshot(char* denoised_path, char* noisy_path);
 };
 } // namespace UniRt

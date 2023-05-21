@@ -6,6 +6,11 @@
 #include <backends/imgui_impl_sdl2.h>
 #include <imgui.h>
 #include <stdio.h>
+#include <string>
+
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <glm/ext.hpp>
 
@@ -206,9 +211,19 @@ Render::Render() {
 
   glEnable(GL_DEPTH_TEST);
 
-  camera.angle = 45.0f;
+  // camera.angle = 25.0f;
+  // camera.speed = 0.0f;
+  // camera.distance = 24.0f;
+  // camera.center = glm::vec3(0.0f, 3.5f, 0.0f);
+
+  // camera.angle = 105.0f;
+  // camera.speed = 0.0f;
+  // camera.distance = 10.0f;
+  // camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
+
+  camera.angle = 0.0f;
   camera.speed = 0.0f;
-  camera.distance = 15.0f;
+  camera.distance = 1.0f;
   camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   int yo = 0;
@@ -268,7 +283,7 @@ Render::Render() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glBindTexture(GL_TEXTURE_2D, depth_texture[i]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 1280, 720, 0,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 1280, 720, 0,
                  GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -357,7 +372,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::BmfrRenewDenoiser();
+  current_denoiser = new Denoiser::BmfrDenoiser();
 
   glObjectLabel(GL_TEXTURE, position_texture[0], -1, "position_texture[0]");
   glObjectLabel(GL_TEXTURE, position_texture[1], -1, "position_texture[1]");
@@ -397,6 +412,9 @@ Render::Render() {
   bunch_of_textures.rng_seed_texture[1] = rng_seed_texture[1];
 
   bunch_of_textures.reprojection_buffer = reprojection_buffer;
+
+  glGenQueries(1, &start_time_query);
+  glGenQueries(1, &stop_time_query);
 }
 
 void Render::SetupEmbree() {
@@ -416,6 +434,7 @@ void Render::SetupEmbree() {
 
   position_texture_pixels.resize(1280 * 720 * 4, 0.0f);
   normal_texture_pixels.resize(1280 * 720 * 4, 0.0f);
+  depth_texture_pixels.resize(1280 * 720 * 1, 0.0f);
 
   rng_seed_texture_pixels[0].resize(1280 * 720 * 4, 0.0f);
   rng_seed_texture_pixels[1].resize(1280 * 720 * 4, 0.0f);
@@ -660,6 +679,11 @@ bool Render::UpdateSDL() {
 }
 
 void Render::DrawGUI() {
+  static int chosen = 0;
+  static char *denoisers[] = {
+      "bmfr", "bmfr_renew", "a-svgf", "oidn", "none", "accum",
+  };
+
   glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "RENDER DRAW GUI");
 
   ImGui_ImplOpenGL3_NewFrame();
@@ -673,49 +697,76 @@ void Render::DrawGUI() {
   ImGui::Text("Current scene: %s", current_scene_name.c_str());
   ImGui::Text("Current frame: %d", current_frame);
 
+  GLuint64 start_time;
+  GLuint64 stop_time;
+  glGetQueryObjectui64v(start_time_query, GL_QUERY_RESULT, &start_time);
+  glGetQueryObjectui64v(stop_time_query, GL_QUERY_RESULT, &stop_time);
+
+  float real_start_time = (float)((double)start_time / 1000000.0);
+  float real_stop_time = (float)((double)stop_time / 1000000.0);
+
+  std::ofstream benchmark_file;
+
+  benchmark_file.open(std::string(denoisers[chosen]) + "_benchmark.csv",
+                      std::ios_base::app);
+  benchmark_file << real_stop_time - real_start_time << std::endl;
+  benchmark_file.close();
+
+  ImGui::Text("Denoise time: %f", real_stop_time - real_start_time);
+
   ImGui::SliderFloat("Camera.far", &camera.far, 10.0f, 320.0f);
+  ImGui::SliderFloat("Camera.angle", &camera.angle, -360.0f, 360.0f);
   ImGui::SliderFloat("Camera.near", &camera.near, 0.01, 1.0f);
 
-  ImGui::SliderFloat("Camera.speed", &camera.speed, -3.0f, 3.0f);
+  ImGui::SliderFloat("Camera.speed", &camera.speed, -14.0f, 14.0f);
 
   if (ImGui::Button("Reset Camera.speed")) {
     camera.speed = 0.0;
   }
 
-  // a list of options in imgui containing "bmfr", "none", "optix"
-  static char *denoisers[] = {
-      "bmfr", "bmfr_renew", "a-svgf", "oidn", "none", "accum",
-  };
-  static int chosen = 0;
+  if (demo_mode &&
+      (chosen != 5 || (chosen == 5 && current_frame % 256 == 255))) {
+    struct stat st = {0};
 
-  if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 4) ||
-      (current_frame == 15 && chosen != 4)) {
-    float *data = new float[1280 * 720 * 4];
-    glBindTexture(GL_TEXTURE_2D,
-                  accumulated_denoised_texture[current_frame % 2]);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, data);
+    char folder_0[1024];
+    sprintf(folder_0, "./movies/");
+    char folder_1[1024];
+    sprintf(folder_1, "./movies/%s/", denoisers[chosen]);
+    char folder_2[1024];
+    sprintf(folder_2, "./movies/%s/%s/", denoisers[chosen],
+            current_scene_name.c_str());
 
-    float *albedo = new float[1280 * 720 * 4];
-    glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, albedo);
+    mkdir(folder_0, 0700);
+    mkdir(folder_1, 0700);
+    mkdir(folder_2, 0700);
 
-    for (int u = 0; u < 1280 * 720 * 4; u++) {
-      data[u] *= albedo[u];
+    char denoised_path[1024];
+    sprintf(denoised_path, "./movies/%s/%s/denoised_blob_%d.buff",
+            denoisers[chosen], current_scene_name.c_str(), current_frame);
+
+    char noisy_path[1024];
+    sprintf(noisy_path, "./movies/%s/%s/noisy_blob_%d.buff", denoisers[chosen],
+            current_scene_name.c_str(), current_frame);
+
+    if (chosen == 5) {
+      ((Denoiser::AccumulatorDenoiser *)current_denoiser)->IncreaseOffset(256);
     }
 
-    char file_path[256];
-    sprintf(file_path, "screenshot_blob_%d_%s.buff", current_frame,
-            denoisers[chosen]);
-    FILE *f = fopen(file_path, "wb");
+    Screenshot(&denoised_path[0], &noisy_path[0]);
+  } else {
+    if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 5) ||
+        (current_frame == 30 && chosen != 5)) {
+      char denoised_path[1024];
+      sprintf(denoised_path, "screenshot_blob_%d_%s.buff", current_frame,
+              denoisers[chosen]);
 
-    fwrite(data, 1280 * 720 * 4 * sizeof(float), 1, f);
+      char noisy_path[1024];
+      sprintf(denoised_path, "noisy_blob.buff", current_frame,
+              denoisers[chosen]);
 
-    fclose(f);
-
-    delete data;
-    delete albedo;
+      Screenshot(denoised_path, noisy_path);
+    }
   }
-
   ImGui::Checkbox("Temporal Accumulation", &temporal_accumulation);
 
   if (temporal_accumulation) {
@@ -859,6 +910,7 @@ void Render::DrawEmbree() {
     ispc_tile.shadow = tiles_shadow[tile_id].data();
     ispc_tile.albedo = tiles_albedo[tile_id].data();
     ispc_tile.position = position_texture_pixels.data();
+    ispc_tile.depth = depth_texture_pixels.data();
     ispc_tile.normal = normal_texture_pixels.data();
     ispc_tile.curr_rng_seed = rng_seed_texture_pixels[current_frame % 2].data();
     ispc_tile.prev_rng_seed =
@@ -883,7 +935,25 @@ void Render::DrawEmbree() {
 
 bool Render::Update() {
 
-  camera.Update(16 / 1000.0);
+  if (demo_mode) {
+    camera.speed = 14.0;
+    // camera.
+    // camera.distance = cosf(glm::radians((float)current_frame));
+    // camera.center.z += 0.02;
+    // if (chosen == 5 && (current_frame % 256) == 0) {
+    //   camera.Update(16 / 1000.0);
+    //   float black[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    //   glClearTexImage(denoised_texture[current_frame % 2], 0, GL_RGBA, GL_FLOAT,
+    //                   &black[0]);
+    //   glClearTexImage(denoised_texture[1 - current_frame % 2], 0, GL_RGBA,
+    //                   GL_FLOAT, &black[0]);
+    // } else {
+
+    // }
+    camera.Update(16 / 1000.0);
+  } else {
+    camera.Update(16 / 1000.0);
+  }
 
   bool quit = UpdateSDL();
 
@@ -935,6 +1005,10 @@ bool Render::Update() {
   glBindTexture(GL_TEXTURE_2D, position_texture[current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT,
                 position_texture_pixels.data());
+
+  glBindTexture(GL_TEXTURE_2D, depth_texture[current_frame % 2]);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, GL_FLOAT,
+                depth_texture_pixels.data());
   float ma = 0.0;
 
   // for (int i = 0; i < position_texture_pixels.size(); i++) {
@@ -964,6 +1038,14 @@ bool Render::Update() {
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
                img_albedo.data());
 
+  glBindTexture(GL_TEXTURE_2D, normal_texture[current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
+               normal_texture_pixels.data());
+
+  glBindTexture(GL_TEXTURE_2D, depth_texture[current_frame % 2]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 1280, 720, 0,
+               GL_DEPTH_COMPONENT, GL_FLOAT, depth_texture_pixels.data());
+
   glBindTexture(GL_TEXTURE_2D, rng_seed_texture[1 - current_frame % 2]);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, 1280, 720, 0, GL_RGBA_INTEGER,
                GL_INT, rng_seed_texture_pixels[1 - current_frame % 2].data());
@@ -982,13 +1064,14 @@ bool Render::Update() {
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
   }
 
+  glQueryCounter(start_time_query, GL_TIMESTAMP);
   DrawDenoise();
+  glQueryCounter(stop_time_query, GL_TIMESTAMP);
 
   if (current_denoiser->NeedPostTemporalAccumulation()) {
     TemporalAccumulationDenoised();
   } else {
-    glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0,
-    0,
+    glCopyImageSubData(denoised_texture[current_frame % 2], GL_TEXTURE_2D, 0, 0,
                        0, 0, accumulated_denoised_texture[current_frame % 2],
                        GL_TEXTURE_2D, 0, 0, 0, 0, 1280, 720, 1);
 
@@ -1145,6 +1228,50 @@ void Render::TemporalAccumulationDenoised() {
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
   glPopDebugGroup();
+}
+
+void Render::Screenshot(char *denoised_path, char *noisy_path) {
+  float *denoised = new float[1280 * 720 * 4];
+  glBindTexture(GL_TEXTURE_2D, accumulated_denoised_texture[current_frame % 2]);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, denoised);
+
+  float *noisy = new float[1280 * 720 * 4];
+  glBindTexture(GL_TEXTURE_2D, shadow_texture[current_frame % 2]);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, noisy);
+
+  float *albedo = new float[1280 * 720 * 4];
+  glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, albedo);
+
+  for (int u = 0; u < 1280 * 720 * 4; u++) {
+    denoised[u] *= albedo[u];
+    noisy[u] *= albedo[u];
+  }
+  {
+    FILE *f = fopen(denoised_path, "wb");
+
+    if (!f) {
+      printf("Couldn't save screenshot to %s...\n", denoised_path);
+    } else {
+      fwrite(denoised, 1280 * 720 * 4 * sizeof(float), 1, f);
+
+      fclose(f);
+    }
+  }
+  {
+    FILE *f = fopen(noisy_path, "wb");
+
+    if (!f) {
+      printf("Couldn't save screenshot to %s...\n", noisy_path);
+    } else {
+      fwrite(noisy, 1280 * 720 * 4 * sizeof(float), 1, f);
+      fclose(f);
+    }
+  }
+
+  delete denoised;
+  delete noisy;
+  delete albedo;
 }
 
 } // namespace UniRt

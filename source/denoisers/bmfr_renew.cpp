@@ -2,12 +2,13 @@
 
 #include <stdio.h>
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
-#define W 64
-#define M 4
+#define W 100
+#define M 10
 #define BLOCK_SIZE 64
 
 namespace UniRt {
@@ -23,6 +24,8 @@ BmfrRenewDenoiser::BmfrRenewDenoiser() {
     ta_ss << features_ta_file.rdbuf();
     std::string features_ta_source = ta_ss.str();
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     GLuint ta_compute =
         CompileShader("../shader/bmfr_regression_renew.comp.glsl",
                       features_ta_source.c_str(), GL_COMPUTE_SHADER);
@@ -30,6 +33,12 @@ BmfrRenewDenoiser::BmfrRenewDenoiser() {
     bmfr_program = glCreateProgram();
     glAttachShader(bmfr_program, ta_compute);
     glLinkProgram(bmfr_program);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+
+    printf("compiling shader: %d\n", duration.count());
 
     glDeleteShader(ta_compute);
   }
@@ -79,100 +88,118 @@ BmfrRenewDenoiser::BmfrRenewDenoiser() {
                nullptr);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
 
   glBindTexture(GL_TEXTURE_2D, denoised_texture[1]);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1280, 720, 0, GL_RGBA, GL_FLOAT,
                nullptr);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  // glGenBuffers(1, &per_frame_buffer);
-  // glBindBuffer(GL_UNIFORM_BUFFER, per_frame_buffer);
-  // glBufferData(GL_UNIFORM_BUFFER, sizeof(PerFrameCB), &per_frame,
+//   glGenBuffers(1, &per_frame_buffer);
+//   glBindBuffer(GL_UNIFORM_BUFFER, per_frame_buffer);
+//   glBufferData(GL_UNIFORM_BUFFER, sizeof(PerFrameCB), &per_frame,
+//                GL_DYNAMIC_DRAW);
+
+  // glGenBuffers(1, &debug_1);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
+  // glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 1), NULL,
   //              GL_DYNAMIC_DRAW);
 
-  glGenBuffers(1, &debug_1);
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_1);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 1), &debug_1,
-               GL_DYNAMIC_DRAW);
+  // glGenBuffers(1, &debug_2);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
+  // glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 1), NULL,
+  //              GL_DYNAMIC_DRAW);
 
-  glGenBuffers(1, &debug_2);
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_2);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W * (M + 1), &debug_2,
-               GL_DYNAMIC_DRAW);
+  // glGenBuffers(1, &debug_3);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_3);
+  // glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W, NULL,
+  //              GL_DYNAMIC_DRAW);
 
-  glGenBuffers(1, &debug_3);
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_3);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W, &debug_3,
-               GL_DYNAMIC_DRAW);
-
-  glGenBuffers(1, &debug_4);
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_4);
-  glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W, &debug_4,
-               GL_DYNAMIC_DRAW);
+  // glGenBuffers(1, &debug_4);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, debug_4);
+  // glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * W, NULL,
+  //              GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &red_tilde);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, red_tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &red_tilde, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &green_tilde);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, green_tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &green_tilde, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &blue_tilde);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, blue_tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &blue_tilde, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &tilde);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &tilde, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &r);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, r);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &r, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &h_tmp);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, h_tmp);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (W) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &h_tmp, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &a_tmp);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, a_tmp);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &a_tmp, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &tmp_in_tilde);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_in_tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &tmp_in_tilde, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &tmp_out_tilde);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_out_tilde);
   glBufferData(GL_SHADER_STORAGE_BUFFER,
                sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
                    (1280 / BLOCK_SIZE),
-               &tmp_out_tilde, GL_DYNAMIC_DRAW);
+               NULL, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &tmp_alpha);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_alpha);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               NULL, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &tmp_v);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, tmp_v);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               sizeof(float) * W * (M + 1) * (1280 / BLOCK_SIZE) *
+                   (1280 / BLOCK_SIZE),
+               NULL, GL_DYNAMIC_DRAW);
 
   printf("hello from bmfr denoiser\n");
 }
@@ -180,6 +207,9 @@ BmfrRenewDenoiser::BmfrRenewDenoiser() {
 GLuint BmfrRenewDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "BMFR REGRESSION");
   glUseProgram(bmfr_program);
+
+  glUniform1i(glGetUniformLocation(bmfr_program, "my_W"), W);
+  // glUniform1i(glGetUniformLocation(bmfr_program, "my_M"), M);
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, textures.position_texture[current_frame % 2]);
@@ -199,6 +229,10 @@ GLuint BmfrRenewDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glBindImageTexture(5, denoised_texture[current_frame % 2], 0, 0, 0,
                      GL_READ_WRITE, GL_RGBA32F);
 
+  //   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0,
+  //   textures.reprojection_buffer);
+
+  glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, red_tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, green_tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, blue_tilde);
@@ -207,6 +241,8 @@ GLuint BmfrRenewDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, tmp_in_tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, tmp_out_tilde);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, h_tmp);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, tmp_alpha);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, tmp_v);
   // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, h_tmp);
   // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, a_tmp);
 
@@ -239,8 +275,6 @@ GLuint BmfrRenewDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   // glBufferData(GL_UNIFORM_BUFFER, sizeof(PerFrameCB), &per_frame,
   //              GL_DYNAMIC_DRAW);
   // glBindBufferBase(GL_UNIFORM_BUFFER, 7, per_frame_buffer);
-
-  glBindBufferBase(GL_UNIFORM_BUFFER, 0, textures.reprojection_buffer);
 
   glDispatchCompute((1280 + (BLOCK_SIZE - 1)) / BLOCK_SIZE,
                     (720 + (BLOCK_SIZE - 1)) / BLOCK_SIZE, 1);
@@ -311,7 +345,8 @@ BmfrRenewDenoiser::~BmfrRenewDenoiser() {
   glDeleteTextures(2, denoised_texture);
 };
 
-void BmfrRenewDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
+void BmfrRenewDenoiser::ReprojectSeed(BunchOfTexture &textures,
+                                      int current_frame) {
   glUseProgram(bmfr_reprojection_program);
 
   glBindImageTexture(0, textures.rng_seed_texture[current_frame % 2], 0, 0, 0,

@@ -60,6 +60,7 @@ struct Tile {
     float *uniform albedo;
     float *uniform shadow;
     float *uniform position;
+    float *uniform depth;
     float *uniform normal;
 
     uint32_t *uniform curr_rng_seed;
@@ -245,14 +246,18 @@ export void trace_rays(void *uniform _scene,
             float3 cam_pos = make_float3(tile->camera_x, tile->camera_y, tile->camera_z);
             float3 dir = normalize(org - cam_pos);
 
-            set_ray_hit(path_ray, cam_pos, dir, 0.f);
+            set_ray_hit(path_ray, cam_pos, dir, 0.0f);
         }
 
         int bounce = 0;
         float3 path_throughput = make_float3(1.0);
         DisneyMaterial mat;
+        // Save first even normals in case the material of the first hit has a high roughness
+        float prev_roughness = 0.0;
         mat4 matrix;
+        mat4 matrix_p;
         do {
+            // print("{%, %, %}\n", path_ray.ray.dir_x, path_ray.ray.dir_y, path_ray.ray.dir_z);
             rtcIntersectV(scene->scene, &context, &path_ray);
 
             context.flags = RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT;
@@ -279,8 +284,8 @@ export void trace_rays(void *uniform _scene,
                             path_ray.ray.org_y + path_ray.ray.tfar * path_ray.ray.dir_y,
                             path_ray.ray.org_z + path_ray.ray.tfar * path_ray.ray.dir_z);
 
-            float3 normal = normalize(
-                make_float3(path_ray.hit.Ng_x, path_ray.hit.Ng_y, path_ray.hit.Ng_z));
+            // float3 normal = normalize(
+            //     make_float3(path_ray.hit.Ng_x, path_ray.hit.Ng_y, path_ray.hit.Ng_z));
 
             const float2 bary = make_float2(path_ray.hit.u, path_ray.hit.v);
 
@@ -289,6 +294,12 @@ export void trace_rays(void *uniform _scene,
 
             float2 uv = make_float2(0.f, 0.f);
             const uint3 indices = geometry->index_buf[prim];
+
+            float3 na = geometry->normal_buf[indices.x];
+            float3 nb = geometry->normal_buf[indices.y];
+            float3 nc = geometry->normal_buf[indices.z];
+
+            float3 normal = (1.f - bary.x - bary.y) * na + bary.x * nb + bary.y * nc;
 
             if (geometry->uv_buf) {
                 float2 uva = geometry->uv_buf[indices.x];
@@ -305,7 +316,44 @@ export void trace_rays(void *uniform _scene,
             unpack_material(
                 mat, &scene->materials[instance->material_ids[geom]], scene->textures, uv);
             
+            // First even normals
             if (bounce == 0) {
+                if (mat.roughness < 0.4) {
+                    RTCRayHit normal_ray;
+                    float3 normal_ray_dir = (-1 * w_o) - 2 * normal * (-1 * w_o * normal);
+                    set_ray_hit(normal_ray, hit_p, normal_ray_dir, EPSILON);
+                    rtcIntersectV(scene->scene, &context, &normal_ray);
+
+                    const int inst_p = normal_ray.hit.instID[0];
+                    const int geom_p = normal_ray.hit.geomID;
+                    const int prim_p = normal_ray.hit.primID;
+
+                    if (!(geom_p == RTC_INVALID_GEOMETRY_ID || inst_p == RTC_INVALID_GEOMETRY_ID ||
+                        prim_p == RTC_INVALID_GEOMETRY_ID)) {
+                        const ISPCInstance *instance_p = &scene->instances[inst_p];
+                        const ISPCGeometry *geometry_p = &instance_p->geometries[geom_p];
+
+                        float3 na_p = geometry_p->normal_buf[geometry_p->index_buf[prim_p].x];
+                        float3 nb_p = geometry_p->normal_buf[geometry_p->index_buf[prim_p].y];
+                        float3 nc_p = geometry_p->normal_buf[geometry_p->index_buf[prim_p].z];
+
+                        const float2 bary_p = make_float2(normal_ray.hit.u, normal_ray.hit.v);
+
+                        float3 normal_p = (1.f - bary_p.x - bary_p.y) * na_p + bary_p.x * nb_p + bary_p.y * nc_p;
+
+                        load_mat4(matrix_p, instance_p->world_to_object);
+                        transpose(matrix_p);
+                        normal_p = normalize(mul(matrix_p, normal_p));
+
+                        // tile->normal[fb_px + 0] = normal_p.x;
+                        // tile->normal[fb_px + 1] = normal_p.y;
+                        // tile->normal[fb_px + 2] = normal_p.z;
+
+                        // tile->depth[fb_px / 4] = 0.0f;
+                    }
+                }
+                
+
                 tile->albedo[px_id + 0] = mat.base_color.x;
                 tile->albedo[px_id + 1] = mat.base_color.y;
                 tile->albedo[px_id + 2] = mat.base_color.z;
@@ -316,6 +364,7 @@ export void trace_rays(void *uniform _scene,
             if (mat.specular_transmission == 0.f && dot(w_o, normal) < 0.0) {
                 normal = neg(normal);
             }
+
             ortho_basis(v_x, v_y, normal);
             illum = illum + path_throughput * sample_direct_light(scene,
                                                                     mat,

@@ -1,34 +1,21 @@
 #version 430
 
-#pragma unroll 0
-
 #define BLOCK_SIZE 64
 #define W 36
-#define S_W 6
-#define M 4
-// 1, NORM_X, NORM_Y, NORM_Z
+#define S_W 5
+#define M 10
+// 1, NORM_X, NORM_Y, NORM_Z, POS_X, POS_Y, POS_Z, POS_X², POS_Y², POS_Z²
+// 2
 #define NOISE_AMOUNT 0.01
 
 #define FEATURES_NOT_SCALED 4
 
 #define BLOCK_OFFSETS_COUNT 16
 const ivec2 BLOCK_OFFSETS[BLOCK_OFFSETS_COUNT] = {
-	ivec2(-30, -30),
-	ivec2(-12, -22),
-	ivec2(-24, -2),
-	ivec2(-8, -16),
-	ivec2(-26, -24),
-	ivec2(-14, -4),
-	ivec2(-4, -28),
-	ivec2(-26, -16),
-	ivec2(-4, -2),
-	ivec2(-24, -32),
-	ivec2(-10, -10),
-	ivec2(-18, -18),
-	ivec2(-12, -30),
-	ivec2(-32, -4),
-	ivec2(-2, -20),
-	ivec2(-22, -12),
+    ivec2(-30, -30), ivec2(-12, -22), ivec2(-24, -2),  ivec2(-8, -16),
+    ivec2(-26, -24), ivec2(-14, -4),  ivec2(-4, -28),  ivec2(-26, -16),
+    ivec2(-4, -2),   ivec2(-24, -32), ivec2(-10, -10), ivec2(-18, -18),
+    ivec2(-12, -30), ivec2(-32, -4),  ivec2(-2, -20),  ivec2(-22, -12),
 };
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -60,14 +47,19 @@ layout(binding = 0, std140) uniform Reprojection {
 }
 uniforms;
 
+int my_W = W;
+int my_M = M;
+
 layout(std430, binding = 1) buffer red_tilde {
   //
   float R_red_tilde[][W][M + 1];
 };
+
 layout(std430, binding = 2) buffer green_tilde {
   //
   float R_green_tilde[][W][M + 1];
 };
+
 layout(std430, binding = 3) buffer blue_tilde {
   //
   float R_blue_tilde[][W][M + 1];
@@ -98,6 +90,16 @@ layout(std430, binding = 8) buffer tmp_h {
   float H_tmp[][W][W];
 };
 
+layout(std430, binding = 9) buffer tmp_alpha {
+  //
+  float alpha[][W];
+};
+
+layout(std430, binding = 10) buffer tmp_v {
+  //
+  float v[][W];
+};
+
 shared float alpha_red[M];
 shared float alpha_green[M];
 shared float alpha_blue[M];
@@ -106,8 +108,7 @@ shared float max_values[M];
 shared float min_values[M];
 shared float mag_values[M];
 
-shared float alpha[W];
-shared float v[W];
+float luminance(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
 
 float random(uint a) {
   a = (a + uint(2127912214u)) + (a << uint(12));
@@ -129,34 +130,34 @@ float add_random(int x, int y, int feature_buffer) {
 void householder_step(int index_buff, int k) {
   // Compute the reflection of the k column
 
-  for (int i = 0; i < W - k; i++) {
-    alpha[i] = T_tmp_in_tilde[index_buff][i + k][k];
+  for (int i = 0; i < my_W - k; i++) {
+    alpha[index_buff][i] = T_tmp_in_tilde[index_buff][i + k][k];
   }
 
-  float sign_a0 = sign(alpha[0]);
+  float sign_a0 = sign(alpha[index_buff][0]);
   float norm_a = 0.0;
-  for (int i = 0; i < W - k; i++) {
-    norm_a += alpha[i] * alpha[i];
+  for (int i = 0; i < my_W - k; i++) {
+    norm_a += alpha[index_buff][i] * alpha[index_buff][i];
   }
   norm_a = sqrt(norm_a);
 
-  for (int i = 0; i < W; i++) {
-    v[i] = 0.0;
+  for (int i = 0; i < my_W; i++) {
+    v[index_buff][i] = 0.0;
   }
 
-  v[0] = sign_a0 * norm_a + alpha[0];
-  for (int i = 1; i < W; i++) {
-    v[i] = v[i] + alpha[i];
+  v[index_buff][0] = sign_a0 * norm_a + alpha[index_buff][0];
+  for (int i = 1; i < my_W; i++) {
+    v[index_buff][i] = v[index_buff][i] + alpha[index_buff][i];
   }
 
   // Compute the corresponding householder matrix
   float uut;
-  for (int i = 0; i < W - k; i++) {
-    uut += v[i] * v[i];
+  for (int i = 0; i < my_W - k; i++) {
+    uut += v[index_buff][i] * v[index_buff][i];
   }
 
-  for (int x = 0; x < W; x++) {
-    for (int y = 0; y < W; y++) {
+  for (int x = 0; x < my_W; x++) {
+    for (int y = 0; y < my_W; y++) {
       if (x < k || y < k) {
         if (x == y) {
           H_tmp[index_buff][x][y] = 1.0;
@@ -165,9 +166,11 @@ void householder_step(int index_buff, int k) {
         }
       } else {
         if (x == y) {
-          H_tmp[index_buff][x][y] = 1.0 - v[x - k] * v[y - k] / uut * 2;
+          H_tmp[index_buff][x][y] =
+              1.0 - v[index_buff][x - k] * v[index_buff][y - k] / uut * 2;
         } else {
-          H_tmp[index_buff][x][y] = 0.0 - v[x - k] * v[y - k] / uut * 2;
+          H_tmp[index_buff][x][y] =
+              0.0 - v[index_buff][x - k] * v[index_buff][y - k] / uut * 2;
         }
       }
     }
@@ -175,14 +178,14 @@ void householder_step(int index_buff, int k) {
 }
 
 void mul_mat_H(int index_buff) {
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 1; j++) {
+  for (int i = 0; i < my_W; i++) {
+    for (int j = 0; j < my_M + 1; j++) {
       T_tmp_out_tilde[index_buff][i][j] = 0.0;
     }
   }
-  for (int i = 0; i < W; i++) {
-    for (int j = 0; j < M + 1; j++) {
-      for (int l = 0; l < W; l++) {
+  for (int i = 0; i < my_W; i++) {
+    for (int j = 0; j < my_M + 1; j++) {
+      for (int l = 0; l < my_W; l++) {
         T_tmp_out_tilde[index_buff][i][j] +=
             H_tmp[index_buff][i][l] * T_tmp_in_tilde[index_buff][l][j];
       }
@@ -215,7 +218,7 @@ void householder_qr(int index_buff, int channel) {
 
   householder_step(index_buff, 4);
   mul_mat_H(index_buff);
-/*
+
   T_tmp_in_tilde[index_buff] = T_tmp_out_tilde[index_buff];
 
   householder_step(index_buff, 5);
@@ -245,23 +248,22 @@ void householder_qr(int index_buff, int channel) {
 
   householder_step(index_buff, 10);
   mul_mat_H(index_buff);
-  */
 
   if (channel == 0) {
-    for (int w = 0; w < W; w++) {
-      for (int m = 0; m < M + 1; m++) {
+    for (int w = 0; w < my_W; w++) {
+      for (int m = 0; m < my_M + 1; m++) {
         R_red_tilde[index_buff][w][m] = T_tmp_out_tilde[index_buff][w][m];
       }
     }
   } else if (channel == 1) {
-    for (int w = 0; w < W; w++) {
-      for (int m = 0; m < M + 1; m++) {
+    for (int w = 0; w < my_W; w++) {
+      for (int m = 0; m < my_M + 1; m++) {
         R_green_tilde[index_buff][w][m] = T_tmp_out_tilde[index_buff][w][m];
       }
     }
   } else if (channel == 2) {
-    for (int w = 0; w < W; w++) {
-      for (int m = 0; m < M + 1; m++) {
+    for (int w = 0; w < my_W; w++) {
+      for (int m = 0; m < my_M + 1; m++) {
         R_blue_tilde[index_buff][w][m] = T_tmp_out_tilde[index_buff][w][m];
       }
     }
@@ -271,7 +273,7 @@ void householder_qr(int index_buff, int channel) {
 }
 
 void resolve(int index_buff, float r_c[M], out float a[M]) {
-  for (int i = 0; i < M; i++) {
+  for (int i = 0; i < my_M; i++) {
     a[i] = 0.0;
   }
 
@@ -283,7 +285,7 @@ void resolve(int index_buff, float r_c[M], out float a[M]) {
 
   for (int i = M - 2; i >= 0; i--) {
     float sum = 0.0;
-    for (int j = i + 1; j < M; j++) {
+    for (int j = i + 1; j < my_M; j++) {
       sum += R[index_buff][i][j] * a[j];
     }
     if (R[index_buff][i][i] != 0) {
@@ -296,24 +298,27 @@ void resolve(int index_buff, float r_c[M], out float a[M]) {
 
 float dot_m(float a[M], float b[M]) {
   float sum = 0.0;
-  for (int i = 0; i < M; i++) {
+  for (int i = 0; i < my_M; i++) {
     sum += a[i] * b[i];
   }
   return sum;
 }
 
 void main() {
+  if (my_M != M) {
+    return;
+  }
+  if (my_W != W) {
+    return;
+  }
+
   int line_width = 1280 / BLOCK_SIZE;
   int index_buff =
       line_width * int(gl_GlobalInvocationID.x) + int(gl_GlobalInvocationID.y);
 
   ivec2 coord = ivec2(gl_GlobalInvocationID.xy) * BLOCK_SIZE;
 
-  // vec2 offset =
-  //     RELATIVE_OFFSETS[uniforms.current_frame % OFFSETS_COUNT] - vec2(0.5);
-  // offset *= 16.0;
-  // offset *= vec2(BLOCK_SIZE);
-  // coord += BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT] * 2;
+  coord += BLOCK_OFFSETS[uniforms.current_frame % BLOCK_OFFSETS_COUNT] * int((float(BLOCK_SIZE) / 32.0) * 2.0);
 
   if (coord.x > uniforms.target_dim.x || coord.y > uniforms.target_dim.y) {
     return;
@@ -325,33 +330,21 @@ void main() {
     }
   }
 
-  // coord *= ivec2(BLOCK_SIZE, BLOCK_SIZE);
-
   // Build T_tilde
-  for (int i = 0; i < W; i++) {
+  for (int i = 0; i < my_W; i++) {
     T_tilde[index_buff][i][0] = 1.0;
   }
 
-  for (int x = FEATURES_NOT_SCALED; x < M; x++) {
+  for (int x = FEATURES_NOT_SCALED; x < my_M; x++) {
     max_values[x] = 0.0;
     min_values[x] = 0.0;
     mag_values[x] = 0.0;
   }
 
-  for (int i = 0; i < W; i++) {
+  for (int i = 0; i < my_W; i++) {
     int x = (i % S_W) * (BLOCK_SIZE / S_W);
     int y = (i / S_W) * (BLOCK_SIZE / S_W);
     ivec2 local_coord = coord + ivec2(x, y);
-
-    if (local_coord.x >= uniforms.target_dim.x) {
-      local_coord.x =
-          int(uniforms.target_dim.x - (local_coord.x - uniforms.target_dim.x));
-    }
-
-    if (local_coord.y >= uniforms.target_dim.y) {
-      local_coord.y =
-          int(uniforms.target_dim.y - (local_coord.y - uniforms.target_dim.y));
-    }
 
     vec4 norm = texelFetch(tex_normal, local_coord, 0);
     vec4 pos = texelFetch(tex_pos, local_coord, 0);
@@ -359,38 +352,32 @@ void main() {
     T_tilde[index_buff][i][1] = norm.x;
     T_tilde[index_buff][i][2] = norm.y;
     T_tilde[index_buff][i][3] = norm.z;
-    // T_tilde[index_buff][i][4] = pos.x;
-    // T_tilde[index_buff][i][5] = pos.y;
-    // T_tilde[index_buff][i][6] = pos.z;
-    // T_tilde[index_buff][i][7] = pos.x * pos.x;
-    // T_tilde[index_buff][i][8] = pos.y * pos.y;
-    // T_tilde[index_buff][i][9] = pos.z * pos.z;
+    T_tilde[index_buff][i][4] = pos.x;
+    T_tilde[index_buff][i][5] = pos.y;
+    T_tilde[index_buff][i][6] = pos.z;
+    T_tilde[index_buff][i][7] = pos.x * pos.x;
+    T_tilde[index_buff][i][8] = pos.y * pos.y;
+    T_tilde[index_buff][i][9] = pos.z * pos.z;
 
     vec4 noisy = texelFetch(tex_indirect, local_coord, 0);
-    T_tilde[index_buff][i][4] = noisy.y;
+    T_tilde[index_buff][i][M] = noisy.y;
   }
 
-  for (int w = 0; w < W; w++) {
-    for (int m = FEATURES_NOT_SCALED; m < M; m++) {
+  for (int w = 0; w < my_W; w++) {
+    for (int m = FEATURES_NOT_SCALED; m < my_M; m++) {
       min_values[m] = min(min_values[m], T_tilde[index_buff][w][m]);
       max_values[m] = max(max_values[m], T_tilde[index_buff][w][m]);
       mag_values[m] += T_tilde[index_buff][w][m] * T_tilde[index_buff][w][m];
     }
   }
 
-  for (int m = FEATURES_NOT_SCALED; m < M; m++) {
+  for (int m = FEATURES_NOT_SCALED; m < my_M; m++) {
     mag_values[m] = sqrt(mag_values[m]);
   }
 
-  for (int w = 0; w < W; w++) {
-    for (int m = 1; m < M; m++) {
-      // if (max_values[m] - min_values[m] > 1.0) {
-      //   T_tilde[w][m] =
-      //       (T_tilde[w][m] - min_values[m]) / (max_values[m] -
-      //       min_values[m]);
-      // } else {
-      //   T_tilde[w][m] = (T_tilde[w][m] - min_values[m]);
-      // }
+  for (int w = 0; w < my_W; w++) {
+    for (int m = 1; m < my_M; m++) {
+
       if (m >= FEATURES_NOT_SCALED && mag_values[m] != 0.0) {
         T_tilde[index_buff][w][m] /= mag_values[m];
       }
@@ -403,7 +390,7 @@ void main() {
   // Compute QR factorization for T_tilde
   householder_qr(index_buff, 0);
 
-  for (int w = 0; w < W; w++) {
+  for (int w = 0; w < my_W; w++) {
     int x = (w % S_W) * (BLOCK_SIZE / S_W);
     int y = (w / S_W) * (BLOCK_SIZE / S_W);
     ivec2 local_coord = coord + ivec2(x, y);
@@ -412,7 +399,7 @@ void main() {
 
   householder_qr(index_buff, 1);
 
-  for (int w = 0; w < W; w++) {
+  for (int w = 0; w < my_W; w++) {
     int x = (w % S_W) * (BLOCK_SIZE / S_W);
     int y = (w / S_W) * (BLOCK_SIZE / S_W);
     ivec2 local_coord = coord + ivec2(x, y);
@@ -426,13 +413,13 @@ void main() {
   float r_green[M];
   float r_blue[M];
 
-  for (int i = 0; i < M; i++) {
-    for (int j = 0; j < M; j++) {
+  for (int i = 0; i < my_M; i++) {
+    for (int j = 0; j < my_M; j++) {
       R[index_buff][i][j] = R_red_tilde[index_buff][i][j];
     }
   }
 
-  for (int j = 0; j < M; j++) {
+  for (int j = 0; j < my_M; j++) {
     r_red[j] = R_red_tilde[index_buff][j][M];
     r_green[j] = R_green_tilde[index_buff][j][M];
     r_blue[j] = R_blue_tilde[index_buff][j][M];
@@ -447,10 +434,18 @@ void main() {
   for (int offx = 0; offx < BLOCK_SIZE; offx++) {
     for (int offy = 0; offy < BLOCK_SIZE; offy++) {
       // Fetch feature for this pixel
-      vec4 pos = texelFetch(tex_pos, coord + ivec2(offx, offy), 0);
-      vec4 norm = texelFetch(tex_normal, coord + ivec2(offx, offy), 0);
-      vec4 depth = texelFetch(tex_depth, coord + ivec2(offx, offy), 0);
-      vec4 alb = texelFetch(tex_albedo, coord + ivec2(offx, offy), 0);
+      ivec2 local_coord = coord + ivec2(offx, offy);
+      if (local_coord.x < 0 || local_coord.y < 0) {
+        continue;
+      }
+      if (local_coord.y > uniforms.target_dim.y ||
+          local_coord.x > uniforms.target_dim.x) {
+        continue;
+      }
+      vec4 pos = texelFetch(tex_pos, local_coord, 0);
+      vec4 norm = texelFetch(tex_normal, local_coord, 0);
+      vec4 depth = texelFetch(tex_depth, local_coord, 0);
+      vec4 alb = texelFetch(tex_albedo, local_coord, 0);
       if (depth.x == 1) {
         continue;
       }
@@ -459,15 +454,13 @@ void main() {
       features[1] = norm.x;
       features[2] = norm.y;
       features[3] = norm.z;
-      // features[4] = pos.x;
-      // features[5] = pos.y;
-      // features[6] = pos.z;
-      // features[7] = pos.x * pos.x;
-      // features[8] = pos.y * pos.y;
-      // features[9] = pos.z * pos.z;
-      for (int m = FEATURES_NOT_SCALED; m < M; m++) {
-        // features[m] =
-        //     (features[m] - min_values[m]) / (max_values[m] - min_values[m]);
+      features[4] = pos.x;
+      features[5] = pos.y;
+      features[6] = pos.z;
+      features[7] = pos.x * pos.x;
+      features[8] = pos.y * pos.y;
+      features[9] = pos.z * pos.z;
+      for (int m = FEATURES_NOT_SCALED; m < my_M; m++) {
         if (mag_values[m] != 0.0) {
           features[m] /= mag_values[m];
         }
@@ -484,11 +477,13 @@ void main() {
       if (blue < 0.0) {
         blue = 0.0;
       }
-      // imageStore(tex_out, coord + ivec2(offx, offy),
-      //            vec4(alpha_red[0], alpha_red[1], alpha_red[2],
-      //            alpha_red[3]));
-      imageStore(tex_out, coord + ivec2(offx, offy),
-                 vec4(red, green, blue, 1.0));
+
+      vec3 color = vec3(red, green, blue);
+      if (luminance(color) > 2.0) {
+        color = normalize(color) * 2.0;
+      }
+
+      imageStore(tex_out, coord + ivec2(offx, offy), vec4(color, 1.0));
     }
   }
 }

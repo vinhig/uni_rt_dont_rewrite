@@ -27,7 +27,7 @@ AccumulatorDenoiser::AccumulatorDenoiser() {
     glDeleteShader(compute);
   }
 
-    {
+  {
     std::ifstream features_ta_file("../shaders/bmfr_reprojection.comp.glsl");
     std::ostringstream ta_ss;
     ta_ss << features_ta_file.rdbuf();
@@ -50,6 +50,8 @@ AccumulatorDenoiser::AccumulatorDenoiser() {
                nullptr);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+  offset_location = glGetUniformLocation(accum_program, "offset");
 }
 
 GLuint AccumulatorDenoiser::Denoise(BunchOfTexture &textures,
@@ -59,6 +61,8 @@ GLuint AccumulatorDenoiser::Denoise(BunchOfTexture &textures,
 
   glUseProgram(accum_program);
   glBindBufferBase(GL_UNIFORM_BUFFER, 1, textures.reprojection_buffer);
+
+  glUniform1fv(offset_location, 1, &offset);
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, textures.noisy_texture[current_frame % 2]);
@@ -71,7 +75,8 @@ GLuint AccumulatorDenoiser::Denoise(BunchOfTexture &textures,
   return accum_texture;
 }
 
-void AccumulatorDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
+void AccumulatorDenoiser::ReprojectSeed(BunchOfTexture &textures,
+                                        int current_frame) {
   glUseProgram(reprojection_program);
 
   glBindImageTexture(0, textures.rng_seed_texture[current_frame % 2], 0, 0, 0,

@@ -18,11 +18,18 @@ public:
 
   void ReprojectSeed(BunchOfTexture &textures, int current_frame) override;
 
+  void IncreaseOffset(float offset) {
+    this->offset += offset;
+  }
+
 private:
     GLuint accum_program;
     GLuint reprojection_program;
 
     GLuint accum_texture;
 
+    float offset;
+
+    GLuint offset_location;
 };
 } // namespace UniRt::Denoiser

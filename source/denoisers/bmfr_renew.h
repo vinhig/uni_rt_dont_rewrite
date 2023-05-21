@@ -28,11 +28,6 @@ public:
   BmfrRenewDenoiser();
   ~BmfrRenewDenoiser();
 
-  GLuint debug_1;
-  GLuint debug_2;
-  GLuint debug_3;
-  GLuint debug_4;
-
   GLuint red_tilde;
   GLuint green_tilde;
   GLuint blue_tilde;
@@ -43,6 +38,8 @@ public:
   GLuint tmp_out_tilde;
   GLuint h_tmp;
   GLuint a_tmp;
+  GLuint tmp_alpha;
+  GLuint tmp_v;
 
   bool NeedPreTemporalAccumulation() override { return true; }
 

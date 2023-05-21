@@ -10,8 +10,8 @@
 // - Added depth buffer as a feature buffer
 // - Ability to change block size
 
-#define BUFFER_COUNT 13
-#define FEATURES_COUNT 10
+#define BUFFER_COUNT 10
+#define FEATURES_COUNT 7
 #define FEATURES_NOT_SCALED 4
 #define BLOCK_PIXELS 1024
 #define LOCAL_SIZE 512
@@ -160,7 +160,8 @@ void main() {
   uvec3 groupId = gl_WorkGroupID;
   uint groupThreadId = gl_LocalInvocationIndex;
 
-  for (uint sub_vector = 0; sub_vector < BLOCK_PIXELS / LOCAL_SIZE; sub_vector++) {
+  for (uint sub_vector = 0; sub_vector < BLOCK_PIXELS / LOCAL_SIZE;
+       sub_vector++) {
     uint index = (sub_vector * LOCAL_SIZE) + groupThreadId;
     ivec2 uv =
         ivec2(int(groupId.x % uint(bmfr_uniforms.horizontal_blocks_count)),
@@ -175,7 +176,7 @@ void main() {
     // Extract value from feature buffers
     // And write them in tmp_data, apply power if needed
     float constant = 1.0;
-    imageStore(tmp_data, ivec2(uvec2(index, 0 + (groupId.x * 13))),
+    imageStore(tmp_data, ivec2(uvec2(index, 0 + (groupId.x * BUFFER_COUNT))),
                vec4(constant));
 
     vec4 normal = texelFetch(tex_normal, uv, 0);
@@ -183,32 +184,28 @@ void main() {
     imageStore(tmp_data, ivec2(uvec2(index, 2 + BLOCK_OFFSET)), vec4(normal.y));
     imageStore(tmp_data, ivec2(uvec2(index, 3 + BLOCK_OFFSET)), vec4(normal.z));
 
-    vec4 depth = texelFetch(curr_depth, uv, 0);
-    float view_depth = get_view_depth(depth.x, uniforms.proj);
-    imageStore(tmp_data, ivec2(uvec2(index, 4 + BLOCK_OFFSET)),
-               vec4(view_depth));
-    imageStore(tmp_data, ivec2(uvec2(index, 5 + BLOCK_OFFSET)),
-               vec4(view_depth));
-    imageStore(tmp_data, ivec2(uvec2(index, 6 + BLOCK_OFFSET)),
-               vec4(view_depth));
+    vec4 pos = texelFetch(tex_pos, uv, 0);
+    imageStore(tmp_data, ivec2(uvec2(index, 4 + BLOCK_OFFSET)), vec4(pos.x));
+    imageStore(tmp_data, ivec2(uvec2(index, 5 + BLOCK_OFFSET)), vec4(pos.y));
+    imageStore(tmp_data, ivec2(uvec2(index, 6 + BLOCK_OFFSET)), vec4(pos.z));
 
-    vec4 position = texelFetch(tex_pos, uv, 0);
-    imageStore(tmp_data, ivec2(uvec2(index, 7 + BLOCK_OFFSET)),
-               vec4(position.x * position.x));
-    imageStore(tmp_data, ivec2(uvec2(index, 8 + BLOCK_OFFSET)),
-               vec4(position.y * position.y));
-    imageStore(tmp_data, ivec2(uvec2(index, 9 + BLOCK_OFFSET)),
-               vec4(position.z * position.z));
+    // vec4 position = texelFetch(tex_pos, uv, 0);
+    // imageStore(tmp_data, ivec2(uvec2(index, 7 + BLOCK_OFFSET)),
+    //            vec4(position.x * position.x));
+    // imageStore(tmp_data, ivec2(uvec2(index, 8 + BLOCK_OFFSET)),
+    //            vec4(position.y * position.y));
+    // imageStore(tmp_data, ivec2(uvec2(index, 9 + BLOCK_OFFSET)),
+    //            vec4(position.z * position.z));
 
     vec4 noisy = texelFetch(tex_noisy, uv, 0);
     float storeTemp_10 = noisy.x;
-    imageStore(tmp_data, ivec2(uvec2(index, 10 + BLOCK_OFFSET)),
+    imageStore(tmp_data, ivec2(uvec2(index, 7 + BLOCK_OFFSET)),
                vec4(storeTemp_10));
     float storeTemp_11 = noisy.y;
-    imageStore(tmp_data, ivec2(uvec2(index, 11 + BLOCK_OFFSET)),
+    imageStore(tmp_data, ivec2(uvec2(index, 8 + BLOCK_OFFSET)),
                vec4(storeTemp_11));
     float storeTemp_12 = noisy.z;
-    imageStore(tmp_data, ivec2(uvec2(index, 12 + BLOCK_OFFSET)),
+    imageStore(tmp_data, ivec2(uvec2(index, 9 + BLOCK_OFFSET)),
                vec4(storeTemp_12));
   }
   barrier();
@@ -343,7 +340,8 @@ void main() {
                    vec4(storeTemp_14));
       }
     } else {
-      for (uint sub_vector_3 = 0; sub_vector_3 < BLOCK_PIXELS / LOCAL_SIZE; sub_vector_3++) {
+      for (uint sub_vector_3 = 0; sub_vector_3 < BLOCK_PIXELS / LOCAL_SIZE;
+           sub_vector_3++) {
         float storeTemp_15 =
             imageLoad(tmp_data,
                       ivec2(uvec2(sub_vector_3 * LOCAL_SIZE + groupThreadId,
@@ -368,7 +366,8 @@ void main() {
   }
   for (uint feature_buffer_1 = FEATURES_COUNT; feature_buffer_1 < BUFFER_COUNT;
        feature_buffer_1++) {
-    for (uint sub_vector_4 = 0; sub_vector_4 < BLOCK_PIXELS / LOCAL_SIZE; sub_vector_4++) {
+    for (uint sub_vector_4 = 0; sub_vector_4 < BLOCK_PIXELS / LOCAL_SIZE;
+         sub_vector_4++) {
       float storeTemp_17 =
           imageLoad(tmp_data,
                     ivec2(uvec2(sub_vector_4 * LOCAL_SIZE + groupThreadId,
@@ -533,7 +532,8 @@ void main() {
               (((2.0 * uVec[index_3]) * dotV) / u_length_squared);
           imageStore(
               out_data,
-              ivec2(uvec2(uint(index_3), feature_buffer_3 + (groupId.x * 13))),
+              ivec2(uvec2(uint(index_3),
+                          feature_buffer_3 + (groupId.x * BUFFER_COUNT))),
               vec4(storeTemp_19));
         }
       }
@@ -557,7 +557,8 @@ void main() {
       if (tmpId < FEATURES_COUNT) {
         rmat[tmpId][BUFFER_COUNT - 1] =
             imageLoad(out_data,
-                      ivec2(uvec2(tmpId, BUFFER_COUNT - 1 + (groupId.x * 13))))
+                      ivec2(uvec2(tmpId, BUFFER_COUNT - 1 +
+                                             (groupId.x * BUFFER_COUNT))))
                 .x;
       }
     }
@@ -587,8 +588,9 @@ void main() {
          sub_vector_10++) {
       uint index_5 = (sub_vector_10 * LOCAL_SIZE) + groupThreadId;
       float tmp_2 =
-          imageLoad(tmp_data,
-                    ivec2(uvec2(index_5, uint(col_1) + (groupId.x * 13))))
+          imageLoad(
+              tmp_data,
+              ivec2(uvec2(index_5, uint(col_1) + (groupId.x * BUFFER_COUNT))))
               .x;
       uVec[index_5] += (rmat[col_1][FEATURES_COUNT] * tmp_2);
       gchannel[index_5] += (rmat[col_1][FEATURES_COUNT + 1] * tmp_2);
@@ -601,8 +603,9 @@ void main() {
     ivec2 uv_1 =
         ivec2(int(groupId.x % uint(bmfr_uniforms.horizontal_blocks_count)),
               int(groupId.x / uint(bmfr_uniforms.horizontal_blocks_count)));
-    uv_1 *= ivec2(32);
-    uv_1 += ivec2(int(index_6 % 32), int(index_6 / 32));
+    uv_1 *= ivec2(BLOCK_EDGE_LENGTH);
+    uv_1 += ivec2(int(index_6 % BLOCK_EDGE_LENGTH),
+                  int(index_6 / BLOCK_EDGE_LENGTH));
     uv_1 += BLOCK_OFFSETS[bmfr_uniforms.frame_number % 16];
     if ((((uv_1.x < 0) || (uv_1.y < 0)) ||
          (uv_1.x >= bmfr_uniforms.target_dim.x)) ||
