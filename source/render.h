@@ -30,6 +30,7 @@ public:
   void SetScene(UniRt::Scene *scene, std::string scene_name);
 
   bool demo_mode;
+  bool dataset_mode;
 
   struct RotatingCamera {
     float angle;
@@ -50,13 +51,14 @@ public:
     void Update(double delta) {
 
       offset.x = cos(glm::radians(angle)) * distance;
+      // offset.y = distance / 3.0 * 2.0 - 2.;
       offset.y = distance / 3.0 * 2.0;
       offset.z = sin(glm::radians(angle)) * distance;
 
       angle += delta * speed;
 
       prev_view_proj = view_proj;
-      proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.0f, near, far);
+      proj = glm::perspective(glm::radians(55.0f), 16.0f / 9.0f, near, far);
       view_proj =
           proj * glm::lookAt(offset, center, glm::vec3(0, 1, 0));
     }
@@ -202,6 +204,6 @@ private:
   // Probably only used after BMFR execution
   void TemporalAccumulationDenoised();
 
-  void Screenshot(char* denoised_path, char* noisy_path);
+  void Screenshot(char* denoised_path, char* noisy_path, char* normal_path = NULL, char* albedo_path = NULL);
 };
 } // namespace UniRt

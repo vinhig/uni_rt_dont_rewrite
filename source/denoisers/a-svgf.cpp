@@ -264,10 +264,10 @@ void ASvgfDenoiser::ReprojectSeed(BunchOfTexture &textures, int current_frame) {
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,
-                  textures.geo_normal_texture[current_frame % 2]);
+                  textures.normal_texture[current_frame % 2]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D,
-                  textures.geo_normal_texture[1 - current_frame % 2]);
+                  textures.normal_texture[1 - current_frame % 2]);
 
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
@@ -325,6 +325,8 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glDispatchCompute((1280 / 3 + 16 - 1) / 16, (720 / 3 + 16 - 1) / 16, 1);
 
     glPopDebugGroup();
+
+    // return gradient_ping_texture;
   }
   // Gradient à-trous
   {
@@ -437,10 +439,10 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D,
-                  textures.geo_normal_texture[current_frame % 2]);
+                  textures.normal_texture[current_frame % 2]);
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D,
-                  textures.geo_normal_texture[1 - current_frame % 2]);
+                  textures.normal_texture[1 - current_frame % 2]);
 
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, textures.depth_texture[current_frame % 2]);
@@ -485,7 +487,7 @@ GLuint ASvgfDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
     glBindTexture(GL_TEXTURE_2D, atrous_pong_texture);
 
     const int num_atrous_iterations = 4;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < num_atrous_iterations; i++) {
       glUniform1i(uniform_color_push_iteration_location, i);
       glDispatchCompute((1280 + 15) / 16, (720 + 15) / 16, 1);
     }

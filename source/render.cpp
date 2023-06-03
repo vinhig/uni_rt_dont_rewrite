@@ -32,6 +32,7 @@
 #include "denoisers/bmfr_renew.h"
 #include "denoisers/none.h"
 #include "denoisers/oidn.h"
+#include "denoisers/tnnd.h"
 
 #include "stb_image.h"
 
@@ -221,9 +222,9 @@ Render::Render() {
   // camera.distance = 10.0f;
   // camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
-  camera.angle = 0.0f;
-  camera.speed = 0.0f;
-  camera.distance = 9.0f;
+  camera.angle = 25.0f;
+  camera.speed = 90.0f;
+  camera.distance = 1.0f;
   camera.center = glm::vec3(0.0f, 1.0f, 0.0f);
 
   int yo = 0;
@@ -372,7 +373,7 @@ Render::Render() {
 
   SetupEmbree();
 
-  current_denoiser = new Denoiser::BmfrDenoiser();
+  current_denoiser = new Denoiser::ASvgfDenoiser();
 
   glObjectLabel(GL_TEXTURE, position_texture[0], -1, "position_texture[0]");
   glObjectLabel(GL_TEXTURE, position_texture[1], -1, "position_texture[1]");
@@ -679,9 +680,9 @@ bool Render::UpdateSDL() {
 }
 
 void Render::DrawGUI() {
-  static int chosen = 0;
+  static int chosen = 2;
   static char *denoisers[] = {
-      "bmfr", "bmfr_renew", "a-svgf", "oidn", "none", "accum",
+      "bmfr", "bmfr_renew", "a-svgf", "oidn-3", "none", "accum", "tnnd",
   };
 
   glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "RENDER DRAW GUI");
@@ -729,41 +730,88 @@ void Render::DrawGUI() {
     struct stat st = {0};
 
     char folder_0[1024];
-    sprintf(folder_0, "./movies/");
+    sprintf(folder_0, "/run/media/vincent/YeahMaBoyYeah/movies/");
     char folder_1[1024];
-    sprintf(folder_1, "./movies/%s/", denoisers[chosen]);
+    sprintf(folder_1, "/run/media/vincent/YeahMaBoyYeah/movies/%s/",
+            denoisers[chosen]);
     char folder_2[1024];
-    sprintf(folder_2, "./movies/%s/%s/", denoisers[chosen],
-            current_scene_name.c_str());
+    sprintf(folder_2, "/run/media/vincent/YeahMaBoyYeah/movies/%s/%s/",
+            denoisers[chosen], current_scene_name.c_str());
 
     mkdir(folder_0, 0700);
     mkdir(folder_1, 0700);
     mkdir(folder_2, 0700);
 
     char denoised_path[1024];
-    sprintf(denoised_path, "./movies/%s/%s/denoised_blob_%d.buff",
-            denoisers[chosen], current_scene_name.c_str(), current_frame);
+    sprintf(
+        denoised_path,
+        "/run/media/vincent/YeahMaBoyYeah/movies/%s/%s/denoised_blob_%d.buff",
+        denoisers[chosen], current_scene_name.c_str(), current_frame);
 
     char noisy_path[1024];
-    sprintf(noisy_path, "./movies/%s/%s/noisy_blob_%d.buff", denoisers[chosen],
+    sprintf(
+        noisy_path,
+        "/run/media/vincent/YeahMaBoyYeah/movies/%s/%s/noisy_blob_%d.buff",
+        denoisers[chosen], current_scene_name.c_str(), current_frame);
+
+    char normal_path[1024];
+    sprintf(
+        normal_path,
+        "/run/media/vincent/YeahMaBoyYeah/movies/%s/%s/normal_blob_%d.buff",
+        denoisers[chosen], current_scene_name.c_str(), current_frame);
+
+    char albedo_path[1024];
+    sprintf(
+        albedo_path,
+        "/run/media/vincent/YeahMaBoyYeah/movies/%s/%s/albedo_blob_%d.buff",
+        denoisers[chosen], current_scene_name.c_str(), current_frame);
+
+    if (chosen == 5) {
+      ((Denoiser::AccumulatorDenoiser *)current_denoiser)->IncreaseOffset(256);
+    }
+
+    Screenshot(&denoised_path[0],
+               &noisy_path[0]); //, &normal_path[0], &albedo_path[0]);
+  } else if (dataset_mode &&
+             (chosen != 5 || (chosen == 5 && current_frame % 256 == 255))) {
+    struct stat st = {0};
+
+    char *folder = "/run/media/vincent/YeahMaBoyYeah/dataset";
+
+    char truth_path[1024];
+    sprintf(truth_path, "%s/truth_blob_%s_%d.buff", folder,
+            current_scene_name.c_str(), current_frame);
+
+    char noisy_path[1024];
+    sprintf(noisy_path, "%s/noisy_blob_%s_%d.buff", folder,
+            current_scene_name.c_str(), current_frame);
+
+    char normal_path[1024];
+    sprintf(normal_path, "%s/normal_blob_%s_%d.buff", folder,
+            current_scene_name.c_str(), current_frame);
+
+    char albedo_path[1024];
+    sprintf(albedo_path, "%s/albedo_blob_%s_%d.buff", folder,
             current_scene_name.c_str(), current_frame);
 
     if (chosen == 5) {
       ((Denoiser::AccumulatorDenoiser *)current_denoiser)->IncreaseOffset(256);
     }
 
-    Screenshot(&denoised_path[0], &noisy_path[0]);
+    // Screenshot(&truth_path[0], &noisy_path[0], &normal_path[0],
+              //  &albedo_path[0]);
   } else {
     if (ImGui::Button("Screenshot") || (current_frame == 1024 && chosen == 5) ||
         (current_frame == 30 && chosen != 5)) {
       char denoised_path[1024];
-      sprintf(denoised_path, "screenshot_blob_%d_%s.buff", current_frame,
+      sprintf(denoised_path, "./screenshot_blob_%d_%s.buff", current_frame,
               denoisers[chosen]);
 
       char noisy_path[1024];
-      sprintf(denoised_path, "noisy_blob.buff", current_frame,
+      sprintf(noisy_path, "./noisy_blob.buff", current_frame,
               denoisers[chosen]);
 
+      printf("HELOLOOOOO!\n");
       Screenshot(denoised_path, noisy_path);
     }
   }
@@ -788,7 +836,7 @@ void Render::DrawGUI() {
 
   if (ImGui::BeginCombo("Denoiser", denoisers[chosen])) {
     {
-      for (auto i = 0; i < 5; i++) {
+      for (auto i = 0; i < 7; i++) {
         if (ImGui::Selectable(denoisers[i], i == chosen)) {
           chosen = i;
           switch (chosen) {
@@ -820,6 +868,11 @@ void Render::DrawGUI() {
           case 5: {
             delete current_denoiser;
             current_denoiser = new Denoiser::AccumulatorDenoiser();
+            break;
+          }
+          case 6: {
+            delete current_denoiser;
+            current_denoiser = new Denoiser::TnndDenoiser();
             break;
           }
           default: {
@@ -936,19 +989,31 @@ void Render::DrawEmbree() {
 bool Render::Update() {
 
   if (demo_mode) {
-    camera.speed = 19.0;
+    camera.speed = -0.0;
     // camera.
     // camera.distance = cosf(glm::radians((float)current_frame));
     // camera.center.z += 0.02;
     // if ((current_frame % 256) == 0) {
     //   camera.Update(16 / 1000.0);
     //   float black[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    //   glClearTexImage(denoised_texture[current_frame % 2], 0, GL_RGBA, GL_FLOAT,
+    //   glClearTexImage(denoised_texture[current_frame % 2], 0, GL_RGBA,
+    //   GL_FLOAT,
     //                   &black[0]);
     //   glClearTexImage(denoised_texture[1 - current_frame % 2], 0, GL_RGBA,
     //                   GL_FLOAT, &black[0]);
     // }
     camera.Update(16 / 1000.0);
+  } else if (dataset_mode) {
+    if ((current_frame % 256) == 0) {
+      camera.speed = 0.0f;
+      camera.angle += 30.0f;
+      camera.Update(16 / 1000.0);
+      float black[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      glClearTexImage(denoised_texture[current_frame % 2], 0, GL_RGBA, GL_FLOAT,
+                      &black[0]);
+      glClearTexImage(denoised_texture[1 - current_frame % 2], 0, GL_RGBA,
+                      GL_FLOAT, &black[0]);
+    }
   } else {
     camera.Update(16 / 1000.0);
   }
@@ -1228,7 +1293,8 @@ void Render::TemporalAccumulationDenoised() {
   glPopDebugGroup();
 }
 
-void Render::Screenshot(char *denoised_path, char *noisy_path) {
+void Render::Screenshot(char *denoised_path, char *noisy_path,
+                        char *normal_path, char *albedo_path) {
   float *denoised = new float[1280 * 720 * 4];
   glBindTexture(GL_TEXTURE_2D, accumulated_denoised_texture[current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, denoised);
@@ -1237,16 +1303,22 @@ void Render::Screenshot(char *denoised_path, char *noisy_path) {
   glBindTexture(GL_TEXTURE_2D, shadow_texture[current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, noisy);
 
+  float *normal = new float[1280 * 720 * 4];
+  glBindTexture(GL_TEXTURE_2D, normal_texture[current_frame % 2]);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, normal);
+
   float *albedo = new float[1280 * 720 * 4];
   glBindTexture(GL_TEXTURE_2D, albedo_texture[current_frame % 2]);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, albedo);
 
   for (int u = 0; u < 1280 * 720 * 4; u++) {
     denoised[u] *= albedo[u];
-    noisy[u] *= albedo[u];
+    // noisy[u] *= albedo[u];
   }
   {
     FILE *f = fopen(denoised_path, "wb");
+
+    printf("saving to %s\n", denoised_path);
 
     if (!f) {
       printf("Couldn't save screenshot to %s...\n", denoised_path);
@@ -1256,20 +1328,43 @@ void Render::Screenshot(char *denoised_path, char *noisy_path) {
       fclose(f);
     }
   }
-  // {
-  //   FILE *f = fopen(noisy_path, "wb");
+  {
+    FILE *f = fopen(noisy_path, "wb");
 
-  //   if (!f) {
-  //     printf("Couldn't save screenshot to %s...\n", noisy_path);
-  //   } else {
-  //     fwrite(noisy, 1280 * 720 * 4 * sizeof(float), 1, f);
-  //     fclose(f);
-  //   }
-  // }
+    if (!f) {
+      printf("Couldn't save screenshot to %s...\n", noisy_path);
+    } else {
+      fwrite(noisy, 1280 * 720 * 4 * sizeof(float), 1, f);
+      fclose(f);
+    }
+  }
+
+  if (normal_path) {
+    FILE *f = fopen(normal_path, "wb");
+
+    if (!f) {
+      printf("Couldn't save screenshot to %s...\n", normal_path);
+    } else {
+      fwrite(normal, 1280 * 720 * 4 * sizeof(float), 1, f);
+      fclose(f);
+    }
+  }
+
+  if (albedo_path) {
+    FILE *f = fopen(albedo_path, "wb");
+
+    if (!f) {
+      printf("Couldn't save screenshot to %s...\n", albedo_path);
+    } else {
+      fwrite(albedo, 1280 * 720 * 4 * sizeof(float), 1, f);
+      fclose(f);
+    }
+  }
 
   delete denoised;
   delete noisy;
   delete albedo;
+  delete normal;
 }
 
 } // namespace UniRt

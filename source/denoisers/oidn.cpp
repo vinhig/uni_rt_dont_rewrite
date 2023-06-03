@@ -35,6 +35,8 @@ OidnDenoiser::OidnDenoiser() {
   device = oidn::newDevice();
   device.commit();
 
+  filter = device.newFilter("RT");
+
   color_buffer = new float[1280 * 720 * 4];
   normal_buffer = new float[1280 * 720 * 4];
   albedo_buffer = new float[1280 * 720 * 4];
@@ -76,12 +78,11 @@ GLuint OidnDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
 
   glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-  filter = device.newFilter("RT");
   filter.setImage("color", color_buffer, oidn::Format::Float3, 1280, 720);
-  filter.setImage("normal", normal_buffer, oidn::Format::Float3, 1280, 720);
-  filter.setImage("albedo", albedo_buffer, oidn::Format::Float3, 1280, 720);
+  // filter.setImage("normal", normal_buffer, oidn::Format::Float3, 1280, 720);
+  // filter.setImage("albedo", albedo_buffer, oidn::Format::Float3, 1280, 720);
   filter.setImage("output", output_buffer, oidn::Format::Float3, 1280, 720);
-  filter.set("hdr", false);
+  filter.set("hdr", true);
 
   filter.commit();
   filter.execute();
@@ -89,6 +90,7 @@ GLuint OidnDenoiser::Denoise(BunchOfTexture &textures, int current_frame) {
   const char *error_message;
   if (device.getError(error_message) != oidn::Error::None) {
     printf("Error with oidn: %s\n", error_message);
+
   }
 
   glBindTexture(GL_TEXTURE_2D, denoised_texture);

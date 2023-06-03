@@ -123,6 +123,14 @@ float bilerp(float _00, float _01, float _10, float _11, vec2 weight) {
   return mix(bottom, top, weight.y);
 }
 
+vec4 smart_clamp(vec4 color) {
+  if (length(color) > 3.0) {
+    return normalize(color) * 3.0;
+  }
+
+  return color;
+}
+
 float luminance(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
 
 bool in_bounds(vec2 coord) {
@@ -192,7 +200,7 @@ void main() {
   }
 
   vec2 weight = fract(reprojected_uv.xy * uniforms.target_dim - 0.5);
-  vec3 curr_color = texelFetch(t_curr_indirect, curr_coord, 0).xyz;
+  vec3 curr_color = smart_clamp(texelFetch(t_curr_indirect, curr_coord, 0)).xyz;
   float lum = luminance(curr_color);
   vec2 curr_moments = {lum, lum * lum};
 
@@ -253,7 +261,7 @@ void main() {
                  curr_coord);
     } else {
       imageStore(t_out_accumulated, curr_coord,
-                 texelFetch(t_curr_indirect, curr_coord, 0));
+                 smart_clamp(texelFetch(t_curr_indirect, curr_coord, 0)));
       imageStore(t_out_moments, curr_coord, vec4(curr_moments, 0.0, 0.0));
       imageStore(t_out_history_length, curr_coord, uvec4(0));
     }

@@ -32,6 +32,7 @@ add_executable(uni_rt_dont_rewrite
 
     source/denoisers/none.cpp
     source/denoisers/bmfr.cpp
+    source/denoisers/tnnd.cpp
     source/denoisers/bmfr_renew.cpp
     source/denoisers/a-svgf.cpp
     source/denoisers/oidn.cpp

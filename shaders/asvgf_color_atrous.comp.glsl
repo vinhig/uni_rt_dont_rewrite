@@ -106,7 +106,8 @@ void filter_image(sampler2D img_color, sampler2D img_moments, out vec3 filtered,
 
   // Fetch features to compute weight for edge-avoiding
   vec3 normal_center = texelFetch(tex_curr_normal, ipos, 0).xyz;
-  float depth_center = get_view_depth(texelFetch(tex_curr_depth, ipos, 0).x, uniforms.proj);
+  float depth_center =
+      get_view_depth(texelFetch(tex_curr_depth, ipos, 0).x, uniforms.proj);
   float fwidth_depth = texelFetch(tex_curr_motion, ipos, 0).w;
 
   float lum_mean = 0.0;
@@ -172,7 +173,8 @@ void filter_image(sampler2D img_color, sampler2D img_moments, out vec3 filtered,
       float w = 1.0;
 
       vec3 normal = texelFetch(tex_curr_normal, p, 0).xyz;
-      float depth = get_view_depth(texelFetch(tex_curr_depth, p, 0).x, uniforms.proj);
+      float depth =
+          get_view_depth(texelFetch(tex_curr_depth, p, 0).x, uniforms.proj);
 
       float dist_z =
           abs(depth_center - depth) * fwidth_depth * denoising.flt_atrous_depth;
@@ -220,8 +222,7 @@ void main() {
 
   switch (push_iteration) {
   case 0:
-    filter_image(tex_atrous_ping, tex_curr_moments, filtered,
-                 filtered_moments);
+    filter_image(tex_atrous_ping, tex_curr_moments, filtered, filtered_moments);
     break;
   case 1:
     filter_image(tex_atrous_pong, tex_atrous_pong_moments, filtered,
@@ -232,6 +233,14 @@ void main() {
                  filtered_moments);
     break;
   case 3:
+    filter_image(tex_atrous_pong, tex_atrous_pong_moments, filtered,
+                 filtered_moments);
+    break;
+  case 4:
+    filter_image(tex_atrous_ping, tex_atrous_ping_moments, filtered,
+                 filtered_moments);
+    break;
+  case 5:
     filter_image(tex_atrous_pong, tex_atrous_pong_moments, filtered,
                  filtered_moments);
     break;
@@ -251,6 +260,14 @@ void main() {
     imageStore(img_atrous_pong_moments, ipos, vec4(filtered_moments, 0, 0));
     break;
   case 3:
+    imageStore(img_atrous_ping, ipos, vec4(filtered, 1.0));
+    imageStore(img_atrous_ping_moments, ipos, vec4(filtered_moments, 0, 0));
+    break;
+  case 4:
+    imageStore(img_atrous_pong, ipos, vec4(filtered, 1.0));
+    imageStore(img_atrous_pong_moments, ipos, vec4(filtered_moments, 0, 0));
+    break;
+  case 5:
     imageStore(img_atrous_ping, ipos, vec4(filtered, 1.0));
     imageStore(img_atrous_ping_moments, ipos, vec4(filtered_moments, 0, 0));
     break;

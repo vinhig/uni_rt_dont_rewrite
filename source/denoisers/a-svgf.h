@@ -23,7 +23,7 @@ private:
     float flt_temporal{1.0f};
     float flt_min_alpha_color{0.02f};
     float flt_min_alpha_moments{0.1f};
-    float flt_atrous{4.0f};
+    float flt_atrous{6.0f};
     float flt_atrous_lum{16.0f};
     float flt_atrous_normal{64.0f};
     float flt_atrous_depth{0.5f};
